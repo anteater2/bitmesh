@@ -62,7 +62,7 @@ func Example() {
 	fmt.Println("closing r1")
 	r1.Stop()
 	// Unordered output:
-	//sends r2 string: a string
+	// sends r2 string: a string
 	// sends r1 int: 123
 	// r2 receives string: a string
 	// sends r1 myStruct: {to r1 2}

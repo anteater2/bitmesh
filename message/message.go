@@ -1,3 +1,5 @@
+// Package message provides utilities to send go objects over the network
+// and process go objects received from the network.
 package message
 
 import (
