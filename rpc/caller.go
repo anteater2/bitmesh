@@ -41,7 +41,7 @@ type RemoteFunc func(addr string, arg interface{}) (interface{}, error)
 
 // Declare registers a return type and makes a function
 // which sends a call to the specified address and block until return or timeout
-// There must be a Caller at the specified address to process the call correctly.
+// There must be a Callee at the specified address to process the call correctly.
 func (c *Caller) Declare(arg interface{}, ret interface{}, timeout time.Duration) RemoteFunc {
 	c.sender.Register(arg)
 	c.receiver.Register(ret)

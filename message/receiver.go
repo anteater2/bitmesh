@@ -59,7 +59,7 @@ func (r *Receiver) Start() error {
 	r.quit = make(chan bool, 1)
 	r.wg = new(sync.WaitGroup)
 	r.wg.Add(1)
-	// start a go routine to listen to connection
+	// start a go routine to listen to connections
 	go func() {
 		defer listener.Close()
 		defer r.wg.Done()

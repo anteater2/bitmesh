@@ -8,7 +8,6 @@ import (
 )
 
 // Callee represents a callee service where remote functions are implemented.
-//
 type Callee struct {
 	sender        *message.Sender
 	receiver      *message.Receiver
@@ -51,7 +50,7 @@ type PassFunc func(addr string, arg interface{}) error
 // For the second type, a PassFunc is provided for f so that f could choose to
 // send the call to other callees. In this case, the second return value of f
 // should be set to false so that the callee will not send back any value.
-// On the other hand, if the second return value of of is true, the return value of f
+// On the other hand, if the second return value of f is true, the return value of f
 // will be sent back.
 func (c *Callee) Implement(f interface{}) {
 	if t, v, ok := checkImplType1(f); ok {

@@ -19,7 +19,7 @@ func NewSender() *Sender {
 	return &Sender{types: make(map[reflect.Type]bool)}
 }
 
-// Register records a type so that package message can send it
+// Register records a type so that Sender can send it
 func (s *Sender) Register(v interface{}) {
 	s.mutex.Lock()
 	gob.Register(v)
@@ -27,7 +27,7 @@ func (s *Sender) Register(v interface{}) {
 	s.mutex.Unlock()
 }
 
-// Send encodes the message using gob and sends it to the address ip:port
+// Send encodes the message using gob and sends it to the addr
 func (s *Sender) Send(addr string, message interface{}) error {
 	if _, prs := s.types[reflect.TypeOf(message)]; !prs {
 		return fmt.Errorf("message: unregistered type %T", message)
