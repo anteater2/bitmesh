@@ -2,7 +2,10 @@ package rpc
 
 import (
 	"fmt"
+	"net"
 	"reflect"
+	"strconv"
+	"sync"
 
 	"github.com/anteater2/bitmesh/message"
 )
@@ -16,10 +19,12 @@ const (
 
 // Callee represents a callee service where remote functions are implemented.
 type Callee struct {
-	sender        *message.Sender
-	receiver      *message.Receiver
+	sender   *message.Sender
+	receiver *message.Receiver
+
 	functions     map[reflect.Type]interface{}
 	functionTypes map[reflect.Type]remoteFuncType
+	rw            sync.RWMutex
 }
 
 // NewCallee creates a new instance of Callee
@@ -27,8 +32,8 @@ func NewCallee(port int) (*Callee, error) {
 	var c Callee
 	var err error
 	c.sender = message.NewSender()
-	c.receiver, err = message.NewReceiver(port, func(v interface{}) {
-		c.handleCall(v.(call))
+	c.receiver, err = message.NewReceiver(port, func(addr string, v interface{}) {
+		c.handleCall(addr, v.(call))
 	})
 	if err != nil {
 		return nil, err
@@ -65,16 +70,20 @@ func (c *Callee) Implement(f interface{}) {
 		c.receiver.Register(reflect.Zero(t).Interface())
 		c.sender.Register(reflect.Zero(t).Interface())
 		c.sender.Register(reflect.Zero(v).Interface())
+		c.rw.Lock()
 		c.functions[t] = f
 		c.functionTypes[t] = alwaysRetrun
+		c.rw.Unlock()
 		return
 	}
 	if t, v, ok := checkImplTypeMayReturn(f); ok {
 		c.receiver.Register(reflect.Zero(t).Interface())
 		c.sender.Register(reflect.Zero(t).Interface())
 		c.sender.Register(reflect.Zero(v).Interface())
+		c.rw.Lock()
 		c.functions[t] = f
 		c.functionTypes[t] = mayReturn
+		c.rw.Unlock()
 		return
 	}
 	panic(fmt.Sprintf("rpc.Callee.Implement: invalid function type %T", f))
@@ -85,26 +94,30 @@ func (c *Callee) Start() error {
 	return c.receiver.Start()
 }
 
-// Addr returns the address of Callee (only valid when Callee is running)
-func (c *Callee) Addr() string {
-	return c.receiver.Addr()
-}
-
 // Stop stops the Callee
 func (c *Callee) Stop() {
 	c.receiver.Stop()
 }
 
-func (c *Callee) handleCall(call call) error {
+func (c *Callee) handleCall(addr string, call call) error {
 	argValue := reflect.ValueOf(call.Arg)
 	argType := argValue.Type()
+	var callerAddr string
+	if call.IsPassedCall {
+		callerAddr = call.CallerAddr
+	} else {
+		callerAddr = changePort(addr, call.CallerPort)
+	}
+	c.rw.RLock()
 	if f, prs := c.functions[argType]; prs {
 		fValue := reflect.ValueOf(f)
-		switch c.functionTypes[argType] {
+		remoteFuncType := c.functionTypes[argType]
+		c.rw.RUnlock()
+		switch remoteFuncType {
 		case alwaysRetrun:
 			out := fValue.Call([]reflect.Value{argValue})
 			reply := reply{ID: call.ID, Ret: out[0].Interface()}
-			return c.sender.Send(call.CallerAddr, reply)
+			return c.sender.Send(callerAddr, reply)
 		case mayReturn:
 			pass := func(addr string, arg interface{}) error {
 				if reflect.TypeOf(arg) != argType {
@@ -113,18 +126,23 @@ func (c *Callee) handleCall(call call) error {
 						arg, argType))
 				}
 				call.Arg = arg
+				call.CallerAddr = callerAddr
+				call.IsPassedCall = true
 				return c.sender.Send(addr, call)
 			}
 			out := fValue.Call([]reflect.Value{argValue, reflect.ValueOf(pass)})
 			if out[1].Bool() == true {
 				reply := reply{ID: call.ID, Ret: out[0].Interface()}
-				return c.sender.Send(call.CallerAddr, reply)
+				return c.sender.Send(callerAddr, reply)
 			}
+			return nil
 		default:
 			panic("rpc.Callee.handleCall: unknown function type")
 		}
+	} else {
+		c.rw.RUnlock()
+		return nil
 	}
-	return nil
 }
 
 // func(T) V
@@ -153,4 +171,12 @@ func checkImplTypeMayReturn(f interface{}) (t reflect.Type, v reflect.Type, ok b
 		return nil, nil, false
 	}
 	return fType.In(0), fType.Out(0), true
+}
+
+func changePort(addr string, port int) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		panic(err)
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }

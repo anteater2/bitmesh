@@ -15,15 +15,16 @@ import (
 type Receiver struct {
 	localAddr *net.TCPAddr
 	addr      string
-	handler   func(interface{})
-	types     map[reflect.Type]bool
+	handler   func(string, interface{})
 	quit      chan bool
 	wg        *sync.WaitGroup
-	mutex     sync.Mutex
+
+	types map[reflect.Type]bool
+	rw    sync.RWMutex
 }
 
 // NewReceiver creates a new instance of Receiver
-func NewReceiver(port int, handler func(interface{})) (*Receiver, error) {
+func NewReceiver(port int, handler func(string, interface{})) (*Receiver, error) {
 	laddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
@@ -37,10 +38,10 @@ func NewReceiver(port int, handler func(interface{})) (*Receiver, error) {
 
 // Register records a type so that then receiver will recognize it later
 func (r *Receiver) Register(v interface{}) {
-	r.mutex.Lock()
+	r.rw.Lock()
 	gob.Register(v)
 	r.types[reflect.TypeOf(v)] = true
-	r.mutex.Unlock()
+	r.rw.Unlock()
 }
 
 // Addr returns addresss of the receiver
@@ -107,8 +108,10 @@ func (r *Receiver) handleConnection(conn net.Conn) {
 			return
 		}
 		// handle when the type is registered
+		r.rw.RLock()
 		if _, prs := r.types[reflect.TypeOf(msg)]; prs {
-			go r.handler(msg)
+			go r.handler(conn.RemoteAddr().String(), msg)
 		}
+		r.rw.RUnlock()
 	}
 }

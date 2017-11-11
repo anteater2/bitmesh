@@ -60,7 +60,7 @@ func Example() {
 
 	// the function declared is called with (address string, arg interface{})
 	// this will be handled by callee1
-	res, err := add(callee1.Addr(), addArg{1, 2})
+	res, err := add("localhost:2001", addArg{1, 2})
 	if err != nil {
 		panic(err)
 	}
@@ -68,7 +68,7 @@ func Example() {
 	fmt.Printf("1 + 2 = %d\n", sum)
 
 	// this will be passed by callee1 and handled by callee2
-	res, err = mul(callee1.Addr(), mulArg{3, 4})
+	res, err = mul("localhost:2001", mulArg{3, 4})
 	if err != nil {
 		panic(err)
 	}
@@ -76,7 +76,7 @@ func Example() {
 	fmt.Printf("3 * 4 = %d\n", prod)
 
 	// this will be handled by callee2
-	_, err = notify(callee2.Addr(), notifyArg{})
+	_, err = notify("localhost:2002", notifyArg{})
 	if err != nil {
 		panic(err)
 	}

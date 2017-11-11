@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/anteater2/bitmesh/message"
@@ -13,20 +14,27 @@ import (
 // It sends the call to callee over the network
 // and captures the correpsponding return value.
 type Caller struct {
+	port     int
 	sender   *message.Sender
 	receiver *message.Receiver
-	retChan  map[int64]chan interface{}
+
+	retChan map[int64]chan interface{}
+	rw      sync.RWMutex
 }
 
 // NewCaller creates a new Caller
 func NewCaller(port int) (*Caller, error) {
 	var c Caller
 	var err error
+	c.port = port
 	c.retChan = make(map[int64]chan interface{})
 	c.sender = message.NewSender()
-	c.receiver, err = message.NewReceiver(port, func(v interface{}) {
+	c.receiver, err = message.NewReceiver(port, func(addr string, v interface{}) {
 		reply := v.(reply)
-		if ret, prs := c.retChan[reply.ID]; prs {
+		c.rw.RLock()
+		ret, prs := c.retChan[reply.ID]
+		c.rw.RUnlock()
+		if prs {
 			ret <- reply.Ret
 		}
 	})
@@ -62,11 +70,17 @@ func (c *Caller) Declare(arg interface{}, ret interface{}, timeout time.Duration
 
 		// prepare a channel to receive return value
 		ret := make(chan interface{}, 1)
+		c.rw.Lock()
 		c.retChan[id] = ret
-		defer delete(c.retChan, id)
+		c.rw.Unlock()
+		defer func() {
+			c.rw.Lock()
+			delete(c.retChan, id)
+			c.rw.Unlock()
+		}()
 
 		// send the call
-		call := call{id, c.receiver.Addr(), arg}
+		call := call{ID: id, Arg: arg, CallerPort: c.port, IsPassedCall: false}
 		err := c.sender.Send(addr, call)
 		if err != nil {
 			return nil, err
@@ -90,13 +104,7 @@ func (c *Caller) Start() error {
 	return c.receiver.Start()
 }
 
-// Addr returns the address of Caller (only valid when Caller is running)
-func (c *Caller) Addr() string {
-	return c.receiver.Addr()
-}
-
 // Stop stops the caller
 func (c *Caller) Stop() {
 	c.receiver.Stop()
-	c.retChan = make(map[int64]chan interface{})
 }

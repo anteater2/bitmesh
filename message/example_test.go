@@ -12,13 +12,13 @@ type myStruct struct {
 }
 
 func Example() {
-	r1, _ := message.NewReceiver(8888, func(v interface{}) {
+	r1, _ := message.NewReceiver(8888, func(addr string, v interface{}) {
 		fmt.Printf("r1 receives %T: %v\n", v, v)
 	})
 	r1.Register(0)
 	r1.Register(myStruct{})
 
-	r2, _ := message.NewReceiver(8889, func(v interface{}) {
+	r2, _ := message.NewReceiver(8889, func(addr string, v interface{}) {
 		fmt.Printf("r2 receives %T: %v\n", v, v)
 	})
 	r2.Register("")
