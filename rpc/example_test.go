@@ -7,8 +7,7 @@ import (
 	"github.com/anteater2/bitmesh/rpc"
 )
 
-// Declare (on the caller side and callee side)
-// Note: only exported fields are transferred
+// argument types
 type addArg struct {
 	X int
 	Y int
@@ -19,20 +18,11 @@ type mulArg struct {
 	Y int
 }
 
-// Implement (only on the callee side)
-func doAddition(arg addArg) int {
-	return arg.X + arg.Y
-}
-
-func doMultiplication(arg mulArg) int {
-	return arg.X * arg.Y
-}
-
 func Example() {
 	// setup caller
 	caller, _ := rpc.NewCaller(2000)
 	// caller needs to declare remote functions
-	// and specify return type and timeout
+	// and specify argument type, return type and timeout
 	add := caller.Declare(addArg{}, 0, time.Second)
 	mul := caller.Declare(mulArg{}, 0, time.Second)
 
@@ -41,13 +31,17 @@ func Example() {
 	callee2, _ := rpc.NewCallee(2002)
 
 	// callee needs to implement remote functions
-	callee1.Implement(doAddition)
+	callee1.Implement(func(arg addArg) int {
+		return arg.X + arg.Y
+	})
 	// callee1 hands over multiplication to callee2
 	callee1.Implement(func(arg mulArg, pass rpc.PassFunc) (int, bool) {
 		pass("localhost:2002", arg)
 		return 0, false
 	})
-	callee2.Implement(doMultiplication)
+	callee2.Implement(func(arg mulArg) int {
+		return arg.X * arg.Y
+	})
 
 	// start
 	caller.Start()
