@@ -18,6 +18,9 @@ type mulArg struct {
 	Y int
 }
 
+type notifyArg struct {
+}
+
 func Example() {
 	// setup caller
 	caller, _ := rpc.NewCaller(2000)
@@ -25,6 +28,9 @@ func Example() {
 	// and specify argument type, return type and timeout
 	add := caller.Declare(addArg{}, 0, time.Second)
 	mul := caller.Declare(mulArg{}, 0, time.Second)
+	// note that remote function always has a return value,
+	// bool can be used as a void type
+	notify := caller.Declare(notifyArg{}, true, time.Second)
 
 	// setup callees
 	callee1, _ := rpc.NewCallee(2001)
@@ -42,6 +48,10 @@ func Example() {
 	callee2.Implement(func(arg mulArg) int {
 		return arg.X * arg.Y
 	})
+	callee2.Implement(func(arg notifyArg) bool {
+		fmt.Println("callee2: someone just called me!")
+		return true
+	})
 
 	// start
 	caller.Start()
@@ -57,13 +67,19 @@ func Example() {
 	sum := res.(int)
 	fmt.Printf("1 + 2 = %d\n", sum)
 
-	// this will be handled by callee2
+	// this will be passed by callee1 and handled by callee2
 	res, err = mul(callee1.Addr(), mulArg{3, 4})
 	if err != nil {
 		panic(err)
 	}
 	prod := res.(int)
 	fmt.Printf("3 * 4 = %d\n", prod)
+
+	// this will be handled by callee2
+	_, err = notify(callee2.Addr(), notifyArg{})
+	if err != nil {
+		panic(err)
+	}
 
 	// stop
 	caller.Stop()
@@ -73,4 +89,5 @@ func Example() {
 	// Output:
 	// 1 + 2 = 3
 	// 3 * 4 = 12
+	// callee2: someone just called me!
 }

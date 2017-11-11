@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"errors"
+	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/anteater2/bitmesh/message"
@@ -39,13 +41,23 @@ func NewCaller(port int) (*Caller, error) {
 // RemoteFunc is the type returned by Declare
 type RemoteFunc func(addr string, arg interface{}) (interface{}, error)
 
-// Declare registers a return type and makes a function
-// which sends a call to the specified address and block until return or timeout
-// There must be a Callee at the specified address to process the call correctly.
+// Declare registers a return type and makes a RemoteFunc
+// which sends a call to the specified address and block until return or timeout.
+// This RemoteFunc will check the type of arg and the type of retuen value.
+// If the type of arg does not match, it will panic; if the type of return value
+// does not match, it will return an error.
+// If Caller does not receive any return value when time is out, an error will return.
 func (c *Caller) Declare(arg interface{}, ret interface{}, timeout time.Duration) RemoteFunc {
 	c.sender.Register(arg)
 	c.receiver.Register(ret)
+	argType := reflect.TypeOf(arg)
+	retType := reflect.TypeOf(ret)
 	return func(addr string, arg interface{}) (interface{}, error) {
+		if reflect.TypeOf(arg) != argType {
+			panic(fmt.Sprintf("rpc.Caller.Declare: bad argument type: %T (expecting %v)",
+				arg, argType))
+		}
+
 		id := time.Now().Unix()
 
 		// prepare a channel to receive return value
@@ -63,6 +75,9 @@ func (c *Caller) Declare(arg interface{}, ret interface{}, timeout time.Duration
 		// wait for return or timeout
 		select {
 		case val := <-ret:
+			if reflect.TypeOf(val) != retType {
+				return nil, fmt.Errorf("bad return type: %T (expecting %v)", val, retType)
+			}
 			return val, nil
 		case <-time.After(timeout):
 			return nil, errors.New("time out")

@@ -7,12 +7,19 @@ import (
 	"github.com/anteater2/bitmesh/message"
 )
 
+type remoteFuncType int
+
+const (
+	alwaysRetrun = iota
+	mayReturn    = iota
+)
+
 // Callee represents a callee service where remote functions are implemented.
 type Callee struct {
 	sender        *message.Sender
 	receiver      *message.Receiver
 	functions     map[reflect.Type]interface{}
-	functionTypes map[reflect.Type]int
+	functionTypes map[reflect.Type]remoteFuncType
 }
 
 // NewCallee creates a new instance of Callee
@@ -28,7 +35,7 @@ func NewCallee(port int) (*Callee, error) {
 	}
 	c.receiver.Register(call{})
 	c.functions = make(map[reflect.Type]interface{})
-	c.functionTypes = make(map[reflect.Type]int)
+	c.functionTypes = make(map[reflect.Type]remoteFuncType)
 	c.sender.Register(call{})
 	c.sender.Register(reply{})
 	return &c, nil
@@ -36,6 +43,7 @@ func NewCallee(port int) (*Callee, error) {
 
 // PassFunc is used to pass the call to another callee.
 // When it is called, the same call will be passed to addr with new argument arg.
+// The type of arg should not changed, otherwise this function will panic.
 type PassFunc func(addr string, arg interface{}) error
 
 // Implement specifies a remote function that is avaiable on this callee.
@@ -53,20 +61,20 @@ type PassFunc func(addr string, arg interface{}) error
 // On the other hand, if the second return value of f is true, the return value of f
 // will be sent back.
 func (c *Callee) Implement(f interface{}) {
-	if t, v, ok := checkImplType1(f); ok {
+	if t, v, ok := checkImplTypeAlwaysReturn(f); ok {
 		c.receiver.Register(reflect.Zero(t).Interface())
 		c.sender.Register(reflect.Zero(t).Interface())
 		c.sender.Register(reflect.Zero(v).Interface())
 		c.functions[t] = f
-		c.functionTypes[t] = 1
+		c.functionTypes[t] = alwaysRetrun
 		return
 	}
-	if t, v, ok := checkImplType2(f); ok {
+	if t, v, ok := checkImplTypeMayReturn(f); ok {
 		c.receiver.Register(reflect.Zero(t).Interface())
 		c.sender.Register(reflect.Zero(t).Interface())
 		c.sender.Register(reflect.Zero(v).Interface())
 		c.functions[t] = f
-		c.functionTypes[t] = 2
+		c.functionTypes[t] = mayReturn
 		return
 	}
 	panic(fmt.Sprintf("rpc.Callee.Implement: invalid function type %T", f))
@@ -93,12 +101,17 @@ func (c *Callee) handleCall(call call) error {
 	if f, prs := c.functions[argType]; prs {
 		fValue := reflect.ValueOf(f)
 		switch c.functionTypes[argType] {
-		case 1:
+		case alwaysRetrun:
 			out := fValue.Call([]reflect.Value{argValue})
 			reply := reply{ID: call.ID, Ret: out[0].Interface()}
 			return c.sender.Send(call.CallerAddr, reply)
-		case 2:
+		case mayReturn:
 			pass := func(addr string, arg interface{}) error {
+				if reflect.TypeOf(arg) != argType {
+					panic(fmt.Sprintf(
+						"rpc.Callee.PassFunc: bad argument type: %T (expecting %v)",
+						arg, argType))
+				}
 				call.Arg = arg
 				return c.sender.Send(addr, call)
 			}
@@ -108,14 +121,14 @@ func (c *Callee) handleCall(call call) error {
 				return c.sender.Send(call.CallerAddr, reply)
 			}
 		default:
-			panic("rpc.handleCall: unknown function type")
+			panic("rpc.Callee.handleCall: unknown function type")
 		}
 	}
 	return nil
 }
 
 // func(T) V
-func checkImplType1(f interface{}) (t reflect.Type, v reflect.Type, ok bool) {
+func checkImplTypeAlwaysReturn(f interface{}) (t reflect.Type, v reflect.Type, ok bool) {
 	fType := reflect.TypeOf(f)
 	if fType.Kind() != reflect.Func {
 		return nil, nil, false
@@ -127,7 +140,7 @@ func checkImplType1(f interface{}) (t reflect.Type, v reflect.Type, ok bool) {
 }
 
 // func(T, pass PassFunc) (V, bool)
-func checkImplType2(f interface{}) (t reflect.Type, v reflect.Type, ok bool) {
+func checkImplTypeMayReturn(f interface{}) (t reflect.Type, v reflect.Type, ok bool) {
 	fType := reflect.TypeOf(f)
 	if fType.Kind() != reflect.Func {
 		return nil, nil, false
