@@ -58,7 +58,7 @@ func Example() {
 	fmt.Printf("1 + 2 = %d\n", sum)
 
 	// this will be handled by callee2
-	res, err = mul(callee2.Addr(), mulArg{3, 4})
+	res, err = mul(callee1.Addr(), mulArg{3, 4})
 	if err != nil {
 		panic(err)
 	}
