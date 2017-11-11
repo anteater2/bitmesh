@@ -8,20 +8,28 @@ import (
 	"sync"
 )
 
-var sendable = make(map[reflect.Type]bool)
-var mutex sync.Mutex
+// Sender sends data of a particular set of types
+type Sender struct {
+	types map[reflect.Type]bool
+	mutex sync.Mutex
+}
+
+// NewSender creates a new instance of Sender
+func NewSender() *Sender {
+	return &Sender{types: make(map[reflect.Type]bool)}
+}
 
 // Register records a type so that package message can send it
-func Register(v interface{}) {
-	mutex.Lock()
+func (s *Sender) Register(v interface{}) {
+	s.mutex.Lock()
 	gob.Register(v)
-	sendable[reflect.TypeOf(v)] = true
-	mutex.Unlock()
+	s.types[reflect.TypeOf(v)] = true
+	s.mutex.Unlock()
 }
 
 // Send encodes the message using gob and sends it to the address ip:port
-func Send(addr string, message interface{}) error {
-	if _, prs := sendable[reflect.TypeOf(message)]; !prs {
+func (s *Sender) Send(addr string, message interface{}) error {
+	if _, prs := s.types[reflect.TypeOf(message)]; !prs {
 		return fmt.Errorf("message: unregistered type %T", message)
 	}
 	remoteAddr, err := net.ResolveTCPAddr("tcp", addr)

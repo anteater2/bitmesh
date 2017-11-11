@@ -10,6 +10,7 @@ import (
 // Callee represents a callee service where remote functions are implemented.
 //
 type Callee struct {
+	sender        *message.Sender
 	receiver      *message.Receiver
 	functions     map[reflect.Type]interface{}
 	functionTypes map[reflect.Type]int
@@ -19,6 +20,7 @@ type Callee struct {
 func NewCallee(port int) (*Callee, error) {
 	var c Callee
 	var err error
+	c.sender = message.NewSender()
 	c.receiver, err = message.NewReceiver(port, func(v interface{}) {
 		c.handleCall(v.(call))
 	})
@@ -28,7 +30,8 @@ func NewCallee(port int) (*Callee, error) {
 	c.receiver.Register(call{})
 	c.functions = make(map[reflect.Type]interface{})
 	c.functionTypes = make(map[reflect.Type]int)
-	message.Register(reply{})
+	c.sender.Register(call{})
+	c.sender.Register(reply{})
 	return &c, nil
 }
 
@@ -53,16 +56,16 @@ type PassFunc func(addr string, arg interface{}) error
 func (c *Callee) Implement(f interface{}) {
 	if t, v, ok := checkImplType1(f); ok {
 		c.receiver.Register(reflect.Zero(t).Interface())
-		message.Register(reflect.Zero(t).Interface())
-		message.Register(reflect.Zero(v).Interface())
+		c.sender.Register(reflect.Zero(t).Interface())
+		c.sender.Register(reflect.Zero(v).Interface())
 		c.functions[t] = f
 		c.functionTypes[t] = 1
 		return
 	}
 	if t, v, ok := checkImplType2(f); ok {
 		c.receiver.Register(reflect.Zero(t).Interface())
-		message.Register(reflect.Zero(t).Interface())
-		message.Register(reflect.Zero(v).Interface())
+		c.sender.Register(reflect.Zero(t).Interface())
+		c.sender.Register(reflect.Zero(v).Interface())
 		c.functions[t] = f
 		c.functionTypes[t] = 2
 		return
@@ -73,6 +76,11 @@ func (c *Callee) Implement(f interface{}) {
 // Start starts the Callee
 func (c *Callee) Start() error {
 	return c.receiver.Start()
+}
+
+// Addr returns the address of Callee (only valid when Callee is running)
+func (c *Callee) Addr() string {
+	return c.receiver.Addr()
 }
 
 // Stop stops the Callee
@@ -89,16 +97,16 @@ func (c *Callee) handleCall(call call) error {
 		case 1:
 			out := fValue.Call([]reflect.Value{argValue})
 			reply := reply{ID: call.ID, Ret: out[0].Interface()}
-			return message.Send(call.CallerAddr, reply)
+			return c.sender.Send(call.CallerAddr, reply)
 		case 2:
 			pass := func(addr string, arg interface{}) error {
 				call.Arg = arg
-				return message.Send(addr, call)
+				return c.sender.Send(addr, call)
 			}
 			out := fValue.Call([]reflect.Value{argValue, reflect.ValueOf(pass)})
 			if out[1].Bool() == true {
 				reply := reply{ID: call.ID, Ret: out[0].Interface()}
-				return message.Send(call.CallerAddr, reply)
+				return c.sender.Send(call.CallerAddr, reply)
 			}
 		default:
 			panic("rpc.handleCall: unknown function type")

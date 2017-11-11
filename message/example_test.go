@@ -26,22 +26,24 @@ func Example() {
 	r1.Start()
 	r2.Start()
 
-	message.Register("")
-	message.Register(0)
-	message.Register(myStruct{})
+	s := message.NewSender()
+
+	s.Register("")
+	s.Register(0)
+	s.Register(myStruct{})
 
 	fmt.Printf("sends r2 string: %v\n", "a string")
-	message.Send("localhost:8889", "a string")
+	s.Send("localhost:8889", "a string")
 
 	fmt.Printf("sends r1 int: %v\n", 123)
-	message.Send("localhost:8888", 123)
+	s.Send("localhost:8888", 123)
 
 	fmt.Printf("sends r1 message_test.myStruct: %v\n", myStruct{"to r1", 2})
-	message.Send("localhost:8888", myStruct{"to r1", 2})
+	s.Send("localhost:8888", myStruct{"to r1", 2})
 
 	// myStruct is not registered in r2 so it will not be received
 	fmt.Printf("sends r2 message_test.myStruct: %v  (won't be received)\n", myStruct{"to r2", 2})
-	message.Send("localhost:8889", myStruct{"to r2", 2})
+	s.Send("localhost:8889", myStruct{"to r2", 2})
 
 	r2.Stop()
 	r1.Stop()
