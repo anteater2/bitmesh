@@ -16,10 +16,10 @@ type Receiver struct {
 	localAddr *net.TCPAddr
 	addr      string
 	handler   func(string, interface{})
-	quit      chan bool
+	quit      chan struct{}
 	wg        *sync.WaitGroup
 
-	types map[reflect.Type]bool
+	types map[reflect.Type]struct{}
 	rw    sync.RWMutex
 }
 
@@ -32,7 +32,7 @@ func NewReceiver(port int, handler func(string, interface{})) (*Receiver, error)
 	return &Receiver{
 		localAddr: laddr,
 		handler:   handler,
-		types:     make(map[reflect.Type]bool),
+		types:     make(map[reflect.Type]struct{}),
 	}, nil
 }
 
@@ -40,7 +40,7 @@ func NewReceiver(port int, handler func(string, interface{})) (*Receiver, error)
 func (r *Receiver) Register(v interface{}) {
 	r.rw.Lock()
 	gob.Register(v)
-	r.types[reflect.TypeOf(v)] = true
+	r.types[reflect.TypeOf(v)] = struct{}{}
 	r.rw.Unlock()
 }
 
@@ -57,7 +57,7 @@ func (r *Receiver) Start() error {
 		return err
 	}
 	r.addr = listener.Addr().String()
-	r.quit = make(chan bool, 1)
+	r.quit = make(chan struct{}, 1)
 	r.wg = new(sync.WaitGroup)
 	r.wg.Add(1)
 	// start a go routine to listen to connections
@@ -90,7 +90,7 @@ func (r *Receiver) Start() error {
 // Stop signals the Receiver to stop and waits until it actually stops
 func (r *Receiver) Stop() {
 	if r.quit != nil {
-		r.quit <- true
+		r.quit <- struct{}{}
 		r.quit = nil
 		r.wg.Wait()
 		r.wg = nil

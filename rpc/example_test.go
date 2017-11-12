@@ -29,8 +29,8 @@ func Example() {
 	add := caller.Declare(addArg{}, 0, time.Second)
 	mul := caller.Declare(mulArg{}, 0, time.Second)
 	// note that remote function always has a return value,
-	// bool can be used as a void type
-	notify := caller.Declare(notifyArg{}, true, time.Second)
+	// empty struct can be used as a void type
+	notify := caller.Declare(notifyArg{}, struct{}{}, time.Second)
 
 	// setup callees
 	callee1, _ := rpc.NewCallee(2001)
@@ -48,9 +48,9 @@ func Example() {
 	callee2.Implement(func(arg mulArg) int {
 		return arg.X * arg.Y
 	})
-	callee2.Implement(func(arg notifyArg) bool {
+	callee2.Implement(func(arg notifyArg) struct{} {
 		fmt.Println("callee2: someone just called me!")
-		return true
+		return struct{}{}
 	})
 
 	// start

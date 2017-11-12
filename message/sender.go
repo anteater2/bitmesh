@@ -10,20 +10,20 @@ import (
 
 // Sender sends data of a particular set of types
 type Sender struct {
-	types map[reflect.Type]bool
+	types map[reflect.Type]struct{}
 	mutex sync.Mutex
 }
 
 // NewSender creates a new instance of Sender
 func NewSender() *Sender {
-	return &Sender{types: make(map[reflect.Type]bool)}
+	return &Sender{types: make(map[reflect.Type]struct{})}
 }
 
 // Register records a type so that Sender can send it
 func (s *Sender) Register(v interface{}) {
 	s.mutex.Lock()
 	gob.Register(v)
-	s.types[reflect.TypeOf(v)] = true
+	s.types[reflect.TypeOf(v)] = struct{}{}
 	s.mutex.Unlock()
 }
 
