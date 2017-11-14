@@ -18,10 +18,9 @@ type Caller struct {
 	sender   *message.Sender
 	receiver *message.Receiver
 
-	nextID func() (uint32, error)
-	freeID func(uint32)
+	nextID func() uint64
 
-	retChan map[uint32]chan interface{}
+	retChan map[uint64]chan interface{}
 	rw      sync.RWMutex
 }
 
@@ -30,8 +29,8 @@ func NewCaller(port int) (*Caller, error) {
 	var c Caller
 	var err error
 	c.port = port
-	c.retChan = make(map[uint32]chan interface{})
-	c.nextID, c.freeID = makeIDGenerator()
+	c.retChan = make(map[uint64]chan interface{})
+	c.nextID = makeIDGenerator()
 	c.sender = message.NewSender()
 	c.receiver, err = message.NewReceiver(port, func(addr string, v interface{}) {
 		reply := v.(reply)
@@ -70,11 +69,7 @@ func (c *Caller) Declare(arg interface{}, ret interface{}, timeout time.Duration
 				arg, argType))
 		}
 
-		id, err := c.nextID()
-		if err != nil {
-			return nil, fmt.Errorf("rpc.Caller.RemoteFunc: out if call ID")
-		}
-		defer c.freeID(id)
+		id := c.nextID()
 
 		// prepare a channel to receive return value
 		ret := make(chan interface{}, 1)
@@ -89,7 +84,7 @@ func (c *Caller) Declare(arg interface{}, ret interface{}, timeout time.Duration
 
 		// send the call
 		call := call{ID: id, Arg: arg, CallerPort: c.port, IsPassedCall: false}
-		err = c.sender.Send(addr, call)
+		err := c.sender.Send(addr, call)
 		if err != nil {
 			return nil, err
 		}
@@ -117,31 +112,11 @@ func (c *Caller) Stop() {
 	c.receiver.Stop()
 }
 
-func makeIDGenerator() (func() (uint32, error), func(id uint32)) {
-	var mutex sync.Mutex
-	var counter uint32
-	var usedID = make(map[uint32]bool)
-	nextID := func() (uint32, error) {
-		mutex.Lock()
-		if len(usedID) == 1<<32 {
-			mutex.Unlock()
-			return 0, errors.New("out of call id")
-		}
-		for {
-			if _, prs := usedID[counter]; !prs {
-				break
-			}
-			counter++
-		}
-		newID := counter
+func makeIDGenerator() func() uint64 {
+	var counter uint64
+	return func() uint64 {
+		ret := counter
 		counter++
-		mutex.Unlock()
-		return newID, nil
+		return ret
 	}
-	freeID := func(id uint32) {
-		mutex.Lock()
-		delete(usedID, id)
-		mutex.Unlock()
-	}
-	return nextID, freeID
 }
