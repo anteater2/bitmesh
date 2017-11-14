@@ -2,7 +2,7 @@ package rpc
 
 // Call represents a remote call
 type call struct {
-	ID           int64
+	ID           uint32
 	Arg          interface{}
 	CallerPort   int
 	CallerAddr   string
@@ -11,6 +11,6 @@ type call struct {
 
 // Reply represents a reply to a remote call
 type reply struct {
-	ID  int64
+	ID  uint32
 	Ret interface{}
 }

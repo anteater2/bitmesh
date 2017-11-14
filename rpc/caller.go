@@ -18,7 +18,10 @@ type Caller struct {
 	sender   *message.Sender
 	receiver *message.Receiver
 
-	retChan map[int64]chan interface{}
+	nextID func() (uint32, error)
+	freeID func(uint32)
+
+	retChan map[uint32]chan interface{}
 	rw      sync.RWMutex
 }
 
@@ -27,7 +30,8 @@ func NewCaller(port int) (*Caller, error) {
 	var c Caller
 	var err error
 	c.port = port
-	c.retChan = make(map[int64]chan interface{})
+	c.retChan = make(map[uint32]chan interface{})
+	c.nextID, c.freeID = makeIDGenerator()
 	c.sender = message.NewSender()
 	c.receiver, err = message.NewReceiver(port, func(addr string, v interface{}) {
 		reply := v.(reply)
@@ -62,11 +66,15 @@ func (c *Caller) Declare(arg interface{}, ret interface{}, timeout time.Duration
 	retType := reflect.TypeOf(ret)
 	return func(addr string, arg interface{}) (interface{}, error) {
 		if reflect.TypeOf(arg) != argType {
-			panic(fmt.Sprintf("rpc.Caller.Declare: bad argument type: %T (expecting %v)",
+			panic(fmt.Sprintf("rpc.Caller.RemoteFunc: bad argument type: %T (expecting %v)",
 				arg, argType))
 		}
 
-		id := time.Now().Unix()
+		id, err := c.nextID()
+		if err != nil {
+			return nil, fmt.Errorf("rpc.Caller.RemoteFunc: out if call ID")
+		}
+		defer c.freeID(id)
 
 		// prepare a channel to receive return value
 		ret := make(chan interface{}, 1)
@@ -81,7 +89,7 @@ func (c *Caller) Declare(arg interface{}, ret interface{}, timeout time.Duration
 
 		// send the call
 		call := call{ID: id, Arg: arg, CallerPort: c.port, IsPassedCall: false}
-		err := c.sender.Send(addr, call)
+		err = c.sender.Send(addr, call)
 		if err != nil {
 			return nil, err
 		}
@@ -107,4 +115,33 @@ func (c *Caller) Start() error {
 // Stop stops the caller
 func (c *Caller) Stop() {
 	c.receiver.Stop()
+}
+
+func makeIDGenerator() (func() (uint32, error), func(id uint32)) {
+	var mutex sync.Mutex
+	var counter uint32
+	var usedID = make(map[uint32]bool)
+	nextID := func() (uint32, error) {
+		mutex.Lock()
+		if len(usedID) == 1<<32 {
+			mutex.Unlock()
+			return 0, errors.New("out of call id")
+		}
+		for {
+			if _, prs := usedID[counter]; !prs {
+				break
+			}
+			counter++
+		}
+		newID := counter
+		counter++
+		mutex.Unlock()
+		return newID, nil
+	}
+	freeID := func(id uint32) {
+		mutex.Lock()
+		delete(usedID, id)
+		mutex.Unlock()
+	}
+	return nextID, freeID
 }
