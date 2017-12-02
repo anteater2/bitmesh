@@ -14,7 +14,7 @@ import (
 // It sends the call to callee over the network
 // and captures the correpsponding return value.
 type Caller struct {
-	port     int
+	port     uint16
 	sender   *message.Sender
 	receiver *message.Receiver
 
@@ -25,7 +25,7 @@ type Caller struct {
 }
 
 // NewCaller creates a new Caller
-func NewCaller(port int) (*Caller, error) {
+func NewCaller(port uint16) (*Caller, error) {
 	var c Caller
 	var err error
 	c.port = port
