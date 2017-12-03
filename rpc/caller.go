@@ -114,9 +114,12 @@ func (c *Caller) Stop() {
 
 func makeIDGenerator() func() uint64 {
 	var counter uint64
+	var mutex sync.Mutex
 	return func() uint64 {
+		mutex.Lock()
 		ret := counter
 		counter++
+		mutex.Unlock()
 		return ret
 	}
 }
