@@ -4,6 +4,7 @@ package table
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/anteater2/bitmesh/chord/key"
 )
@@ -19,6 +20,7 @@ type HashEntry struct {
 type HashTable struct {
 	hashEntries []HashEntry
 	maximum     uint64
+	rw          sync.RWMutex
 }
 
 func NewTable(maxKeys uint64) *HashTable {
@@ -26,6 +28,7 @@ func NewTable(maxKeys uint64) *HashTable {
 }
 
 func (self *HashTable) GetRange(start key.Key, end key.Key) []HashEntry {
+	self.rw.RLock()
 	entries := []HashEntry{}
 	for i := start + 1; i <= end+1; i++ {
 		hashEntry := &self.hashEntries[i]
@@ -37,10 +40,12 @@ func (self *HashTable) GetRange(start key.Key, end key.Key) []HashEntry {
 			}
 		}
 	}
+	self.rw.RUnlock()
 	return entries
 }
 
 func (self *HashTable) Put(hashKey string, value []byte) {
+	self.rw.Lock()
 	// TO DO: Replace if key is the same
 	position := key.Hash(hashKey, self.maximum)
 	newHashEntry := HashEntry{Key: hashKey, Value: value}
@@ -53,12 +58,15 @@ func (self *HashTable) Put(hashKey string, value []byte) {
 		}
 		hashEntry.next = &newHashEntry
 	}
+	self.rw.Unlock()
 }
 func (self *HashTable) Get(hashKey string) ([]byte, error) {
+	self.rw.RLock()
 	position := key.Hash(hashKey, self.maximum)
 	hashEntry := self.hashEntries[position]
 	for !hashEntry.IsNil() {
 		if hashEntry.Key == hashKey {
+			self.rw.RUnlock()
 			return hashEntry.Value, nil
 		}
 		if hashEntry.next == nil {
@@ -66,6 +74,7 @@ func (self *HashTable) Get(hashKey string) ([]byte, error) {
 		}
 		hashEntry = *hashEntry.next
 	}
+	self.rw.RUnlock()
 	return []byte{0}, errors.New("No such key!")
 }
 func (self HashEntry) IsNil() bool {

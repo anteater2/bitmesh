@@ -233,7 +233,7 @@ func CreateLocalNode() {
 	RPCFindSuccessor = RPCCaller.Declare(key.NewKey(1), RemoteNode{}, 1*time.Second)
 	RPCGetPredecessor = RPCCaller.Declare(0, RemoteNode{}, 1*time.Second)
 	RPCIsAlive = RPCCaller.Declare(true, true, 1*time.Second)
-	RPCGetKey = RPCCaller.Declare([]byte{}, GetKeyResponse{}, 5*time.Second)
+	RPCGetKey = RPCCaller.Declare("", GetKeyResponse{}, 5*time.Second)
 	RPCPutKey = RPCCaller.Declare(PutKeyRequest{}, true, 5*time.Second)
 	RPCPutKeyBackup = RPCCaller.Declare(PutKeyRequest{}, 0, 5*time.Second)
 	RPCGetKeyRange = RPCCaller.Declare(GetKeyRangeRequest{}, []table.HashEntry{}, 100*time.Second)
@@ -283,23 +283,30 @@ func Join(ring string) {
 }
 
 func GetKey(keyString string) GetKeyResponse {
-	if !key.Hash(keyString, config.MaxKey()).BetweenEndInclusive(Key, Successor.Key) {
+	log.Printf("GetKey(%s)\n", keyString)
+	if !key.Hash(keyString, config.MaxKey()).BetweenEndInclusive(Predecessor.Key, Key) {
+		log.Printf("GetKey(%s): sorry, it's none of my business\n", keyString)
 		return GetKeyResponse{[]byte{0}, false}
 	}
 	rv, err := InternalTable.Get(keyString)
 	if err != nil {
+		log.Printf("GetKey(%s): no such key\n", keyString)
 		return GetKeyResponse{[]byte{0}, false}
 	}
+	log.Printf("GetKey(%s): success\n", keyString)
 	return GetKeyResponse{rv, true}
 }
 
 func PutKey(pkr PutKeyRequest) bool {
 	keyString := pkr.KeyString
 	data := pkr.Data
-	if !key.Hash(keyString, config.MaxKey()).BetweenEndInclusive(Key, Successor.Key) {
+	log.Printf("PutKey(%s)\n", keyString)
+	if !key.Hash(keyString, config.MaxKey()).BetweenEndInclusive(Predecessor.Key, Key) {
+		log.Printf("PutKey(%s): sorry, it's none of my business\n", keyString)
 		return false
 	}
 	InternalTable.Put(keyString, data)
+	log.Printf("PutKey(%s): success\n", keyString)
 	return true
 }
 
@@ -314,16 +321,12 @@ func GetKeyRange(gkr GetKeyRangeRequest) []table.HashEntry {
 	return InternalTable.GetRange(gkr.Start, gkr.End)
 }
 
-func joinAddrPort(addr string, port uint16) string {
-	return fmt.Sprintf("%s:%d", addr, port)
-}
-
 func Start() {
 	err := config.Init()
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Creating local node @IP%s on its own ring of size %d...\n", config.Addr(), config.MaxKey())
+	log.Printf("Creating local node @IP %s on its own ring of size %d...\n", config.Addr(), config.MaxKey())
 	CreateLocalNode()
 	RPCCallee.Start()
 	RPCCaller.Start()
@@ -334,4 +337,61 @@ func Start() {
 	go Stabilize()
 	go FixFingers()
 	go CheckPredecessor()
+}
+
+/*
+ * The following is new
+ */
+
+func joinAddrPort(addr string, port uint16) string {
+	return fmt.Sprintf("%s:%d", addr, port)
+}
+
+func isLocalResponsible(k key.Key) bool {
+	if Predecessor == nil {
+		return false
+	}
+	return k.BetweenEndInclusive(Predecessor.Key, Key)
+}
+
+func Put(k string, v []byte) error {
+	hashk := key.Hash(k, config.MaxKey())
+	request := PutKeyRequest{k, v}
+	if isLocalResponsible(hashk) {
+		if !PutKey(request) {
+			return fmt.Errorf("put failed")
+		}
+		return nil
+	}
+	remote := joinAddrPort(FindSuccessor(hashk).Address, config.CalleePort())
+	ok, err := RPCPutKey(remote, request)
+	if err != nil {
+		return err
+	}
+	if !ok.(bool) {
+		return fmt.Errorf("put failed")
+	}
+	return nil
+}
+
+func Get(k string) ([]byte, error) {
+	hashk := key.Hash(k, config.MaxKey())
+	var response GetKeyResponse
+	if isLocalResponsible(hashk) {
+		response = GetKey(k)
+		if response.Error == false {
+			return nil, fmt.Errorf("get failed")
+		}
+		return response.Data, nil
+	}
+	remote := joinAddrPort(FindSuccessor(hashk).Address, config.CalleePort())
+	res, err := RPCGetKey(remote, k)
+	response = res.(GetKeyResponse)
+	if err != nil {
+		return nil, err
+	}
+	if response.Error == false {
+		return nil, fmt.Errorf("get failed")
+	}
+	return response.Data, nil
 }
