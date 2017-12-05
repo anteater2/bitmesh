@@ -15,5 +15,5 @@ docker run -it bitmesh chord -n 10 [-c 172.17.0.2]
 ```
 docker run -it bitmesh dht
 ```
-The will try to put 1000 key value pairs and randomly get 100 out of them.
+The client will try to put 1000 key value pairs and randomly get 100 out of them.
 If any of them are lost or changed, the program will panic.
