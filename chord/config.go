@@ -1,4 +1,4 @@
-package config
+package chord
 
 import (
 	"errors"
@@ -7,16 +7,16 @@ import (
 	"net"
 )
 
-var (
+var config struct {
 	addr       string
 	bits       uint64
-	callerPort uint16 = 2000
-	calleePort uint16 = 2001
+	callerPort uint16
+	calleePort uint16
 	introducer string
 	isCreator  bool
 	maxKey     uint64
 	numFingers uint64
-)
+}
 
 // GetOutboundIP gets preferred outbound IP of this machine using a filthy hack
 // The connection should not actually require the Google DNS service (the 8.8.8.8),
@@ -32,39 +32,18 @@ func GetOutboundIP() string {
 	return localAddr.IP.String()
 }
 
-// CallerPort returns the port of the caller
-func CallerPort() uint16 {
-	return callerPort
-}
-
-// CalleePort returns the port of the callee
-func CalleePort() uint16 {
-	return calleePort
-}
-
-// Creator returns the truth value of whether this node is the first node
-// in a chord network
-func Creator() bool {
-	return isCreator
-}
-
-// Addr is this node's preferred outbound IP
-func Addr() string {
-	return addr
-}
-
 // Init initializes the configs
 func Init() error {
-	addr = GetOutboundIP()
+	config.addr = GetOutboundIP()
 	flag.Uint64Var(
-		&bits,
+		&config.bits,
 		"n",
 		0,
 		"Create a new chord ring with a keyspace of size 2^numBits",
 	)
 
 	flag.StringVar(
-		&introducer,
+		&config.introducer,
 		"c",
 		"",
 		"Create a new node and connect to the specified ring address",
@@ -72,30 +51,32 @@ func Init() error {
 
 	flag.Parse()
 
-	if bits == 0 {
+	if config.bits == 0 {
 		return errors.New("you must specify the keyspace size of the chord ring")
 	}
 
-	if bits > 63 {
+	if config.bits > 63 {
 		return errors.New("invalid keyspace; maximum keyspace size is 63") // Not really, but easier for now
 	}
-	isCreator = introducer == ""
-	maxKey = 1 << bits
-	numFingers = bits - 1
+	config.isCreator = config.introducer == ""
+	config.maxKey = 1 << config.bits
+	config.numFingers = config.bits - 1
+	config.callerPort = 2000
+	config.calleePort = 2001
 	return nil
 }
 
 // Introducer returns the introducing address
 func Introducer() string {
-	return introducer
+	return config.introducer
 }
 
 // MaxKey returns the size of the key space.
 func MaxKey() uint64 {
-	return maxKey
+	return config.maxKey
 }
 
 // NumFingers returns the size of a finger table
 func NumFingers() uint64 {
-	return numFingers
+	return config.numFingers
 }

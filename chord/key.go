@@ -2,8 +2,6 @@ package chord
 
 import (
 	"hash/fnv"
-
-	"github.com/anteater2/bitmesh/chord/config"
 )
 
 // Key is a key in the distributed hash table.
@@ -16,7 +14,7 @@ type Key uint64
 func (key Key) BetweenExclusive(start Key, end Key) bool {
 	s, e := uint64(start), uint64(end)
 	k := uint64(key)
-	if s > config.MaxKey() || e > config.MaxKey() || k > config.MaxKey() {
+	if s > config.maxKey || e > config.maxKey || k > config.maxKey {
 		panic("MaxKey constraint has been violated!")
 	}
 	if s == e {
@@ -34,7 +32,7 @@ func (key Key) BetweenExclusive(start Key, end Key) bool {
 func (key Key) BetweenEndInclusive(start Key, end Key) bool {
 	s, e := uint64(start), uint64(end)
 	k := uint64(key)
-	if s > config.MaxKey() || e > config.MaxKey() || k > config.MaxKey() {
+	if s > config.maxKey || e > config.maxKey || k > config.maxKey {
 		panic("MaxKey constraint has been violated!")
 	}
 	if s == e {
@@ -55,7 +53,7 @@ func NewKey(value uint64) Key {
 // Valid returns true if the key is within the keyspace, false otherwise
 func (key Key) Valid() bool {
 	k := uint64(key)
-	return 0 <= k && k < config.MaxKey() // Check for 0 <= not necessary
+	return 0 <= k && k < config.maxKey // Check for 0 <= not necessary
 }
 
 // Hash a string, returning a key bounded by maxKey.
