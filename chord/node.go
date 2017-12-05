@@ -13,26 +13,26 @@ import (
 	"github.com/anteater2/bitmesh/rpc"
 )
 
-var InternalTable *table.HashTable
+var internalTable *table.HashTable
 
 var Address string
 var Key key.Key
-var Fingers []*RemoteNode
-var Predecessor *RemoteNode
-var Successor *RemoteNode
-var RPCCaller *rpc.Caller
-var RPCCallee *rpc.Callee
+var fingers []*RemoteNode
+var predecessor *RemoteNode
+var successor *RemoteNode
+var rpcCaller *rpc.Caller
+var rpcCallee *rpc.Callee
 
-var RPCFindSuccessor rpc.RemoteFunc
-var RPCNotify rpc.RemoteFunc
-var RPCGetPredecessor rpc.RemoteFunc
-var RPCIsAlive rpc.RemoteFunc
-var RPCPutKey rpc.RemoteFunc
-var RPCGetKey rpc.RemoteFunc
-var RPCGetKeyRange rpc.RemoteFunc
+var rpcFindSuccessor rpc.RemoteFunc
+var rpcNotify rpc.RemoteFunc
+var rpcGetPredecessor rpc.RemoteFunc
+var rpcIsAlive rpc.RemoteFunc
+var rpcPutKey rpc.RemoteFunc
+var rpcGetKey rpc.RemoteFunc
+var rpcGetKeyRange rpc.RemoteFunc
 
-// RPCPutKeyBackup is used to backup a key to the node's predecessor.  This way, if the node fails, the key is duplicated.
-var RPCPutKeyBackup rpc.RemoteFunc
+// rpcPutKeyBackup is used to backup a key to the node's predecessor.  This way, if the node fails, the key is duplicated.
+var rpcPutKeyBackup rpc.RemoteFunc
 
 // RemoteNode holds information for connecting to a remote node
 type RemoteNode struct {
@@ -60,11 +60,11 @@ type GetKeyRangeRequest struct {
 func ClosestPrecedingNode(key key.Key) RemoteNode {
 	for i := config.NumFingers() - 1; i > 0; i-- { // WARNING: GO DOES THIS i>0 CHECK AT THE END OF THE LOOP!
 		//log.Printf("Checking finger %d\n", i)
-		if Fingers[i] == nil {
+		if fingers[i] == nil {
 			panic("You attempted to find ClosestPrecedingNode without an initialized finger table!")
 		}
-		if Fingers[i].Key.BetweenExclusive(Key, key) {
-			return *Fingers[i]
+		if fingers[i].Key.BetweenExclusive(Key, key) {
+			return *fingers[i]
 		}
 	}
 	return RemoteNode{Address: Address, Key: Key}
@@ -72,9 +72,9 @@ func ClosestPrecedingNode(key key.Key) RemoteNode {
 
 // FindSuccessor finds the successor node to the key.  This may require RPC calls.
 func FindSuccessor(key key.Key) RemoteNode {
-	if key.BetweenEndInclusive(Key, Successor.Key) {
+	if key.BetweenEndInclusive(Key, successor.Key) {
 		// key is between this node and its successor
-		return *Successor
+		return *successor
 	}
 	target := ClosestPrecedingNode(key)
 	if target.Address == Address {
@@ -84,11 +84,11 @@ func FindSuccessor(key key.Key) RemoteNode {
 	}
 	// Now, we have to do an RPC on target to find the successor.
 
-	interf, err := RPCFindSuccessor(joinAddrPort(target.Address, config.CalleePort()), key)
+	interf, err := rpcFindSuccessor(joinAddrPort(target.Address, config.CalleePort()), key)
 	if err != nil {
 		log.Printf("[DIAGNOSTIC] Remote target is " + joinAddrPort(target.Address, config.CalleePort()) + "\n")
 		log.Print(err)
-		panic("RPCFindSuccessor failed!")
+		panic("rpcFindSuccessor failed!")
 	}
 	rv := interf.(RemoteNode)
 	return rv
@@ -96,22 +96,22 @@ func FindSuccessor(key key.Key) RemoteNode {
 
 // Notify notifies the successor that you are the predecessor
 func Notify(node RemoteNode) int {
-	if Predecessor == nil || node.Key.BetweenExclusive(Predecessor.Key, Key) {
+	if predecessor == nil || node.Key.BetweenExclusive(predecessor.Key, Key) {
 		log.Printf("Got notify from %s!  New predecessor: %d\n", node.Address, node.Key)
-		Predecessor = &node
-		if Predecessor.Address != Address {
+		predecessor = &node
+		if predecessor.Address != Address {
 
-			rvInterf, err := RPCGetKeyRange(joinAddrPort(Predecessor.Address, config.CalleePort()), GetKeyRangeRequest{Key, Predecessor.Key})
+			rvInterf, err := rpcGetKeyRange(joinAddrPort(predecessor.Address, config.CalleePort()), GetKeyRangeRequest{Key, predecessor.Key})
 			if err != nil {
 				log.Fatal(err)
 			}
 			rv := rvInterf.([]table.HashEntry)
 			for _, entry := range rv {
-				InternalTable.Put(entry.Key, entry.Value)
+				internalTable.Put(entry.Key, entry.Value)
 			}
 		}
 	}
-	return 0 // Necessary to interface with RPCCaller
+	return 0 // Necessary to interface with rpcCaller
 }
 
 //Stabilize the Successor and Predecessor fields of this node.
@@ -119,33 +119,33 @@ func Notify(node RemoteNode) int {
 func Stabilize() {
 	for true { // This is how while loops work.  Not even joking.
 		var remote RemoteNode
-		if Predecessor == nil {
-			log.Printf("Null predecessor!  New predecessor: %d\n", Successor.Key)
-			Predecessor = Successor
+		if predecessor == nil {
+			log.Printf("Null predecessor!  New predecessor: %d\n", successor.Key)
+			predecessor = successor
 		}
-		if Successor.Address == Address {
+		if successor.Address == Address {
 			// Avoid making an RPC call to ourselves
-			remote = *Predecessor
+			remote = *predecessor
 		} else {
 
-			remoteInterf, err := RPCGetPredecessor(joinAddrPort(Successor.Address, config.CalleePort()), 0) // 0 is a dummy value so that the RPC interface can work
+			remoteInterf, err := rpcGetPredecessor(joinAddrPort(successor.Address, config.CalleePort()), 0) // 0 is a dummy value so that the RPC interface can work
 			if err != nil {                                                                                 //TODO: Make the error mean something so we can check it here!
 				log.Printf("[DIAGNOSTIC] Stabilization call failed!")
 				log.Printf("[DIAGNOSTIC] Error: " + strconv.Itoa(int(remote.Key)))
 				log.Print(err)
-				log.Printf("[DIAGNOSTIC] Assuming that the error is the result of a successor node disconnection. Jumping new successor: " + Fingers[1].Address)
-				Successor = Fingers[1]
+				log.Printf("[DIAGNOSTIC] Assuming that the error is the result of a successor node disconnection. Jumping new successor: " + fingers[1].Address)
+				successor = fingers[1]
 			}
 			remote = remoteInterf.(RemoteNode)
 		}
-		if remote.Key.BetweenExclusive(Key, Successor.Key) {
+		if remote.Key.BetweenExclusive(Key, successor.Key) {
 			log.Printf("New successor %d\n", remote.Key)
-			Successor = &remote
-			Fingers[0] = &remote
-			log.Printf("My keyspace is (%d, %d)\n", Key, Successor.Key)
+			successor = &remote
+			fingers[0] = &remote
+			log.Printf("My keyspace is (%d, %d)\n", Key, successor.Key)
 		}
 
-		RPCNotify(joinAddrPort(Successor.Address, config.CalleePort()), RemoteNode{
+		rpcNotify(joinAddrPort(successor.Address, config.CalleePort()), RemoteNode{
 			Address: Address,
 			Key:     Key,
 		})
@@ -165,10 +165,10 @@ func FixFingers() {
 		val := (uint64(Key) + offset) % config.MaxKey()
 		newFinger := FindSuccessor(key.NewKey(val))
 		//log.Printf("Updating finger %d (pointing to key %d) of %d to point to node %s\n", currentFingerIndex, val, len(Fingers), newFinger.Address)
-		if newFinger.Address != Fingers[currentFingerIndex].Address {
-			log.Printf("Updating finger %d (key %d) of %d to point to node %s (key %d)\n", currentFingerIndex, val, len(Fingers)-1, newFinger.Address, newFinger.Key)
+		if newFinger.Address != fingers[currentFingerIndex].Address {
+			log.Printf("Updating finger %d (key %d) of %d to point to node %s (key %d)\n", currentFingerIndex, val, len(fingers)-1, newFinger.Address, newFinger.Key)
 		}
-		Fingers[currentFingerIndex] = &newFinger
+		fingers[currentFingerIndex] = &newFinger
 		time.Sleep(time.Second * 1)
 	}
 }
@@ -181,12 +181,12 @@ func IsAlive(void bool) bool {
 // CheckPredecessor is a goroutine that keeps tabs on the predecessor and updates itself if the predecessor leaves the network.
 func CheckPredecessor() {
 	for true {
-		if Predecessor != nil {
-			_, err := RPCIsAlive(joinAddrPort(Predecessor.Address, config.CalleePort()), true)
+		if predecessor != nil {
+			_, err := rpcIsAlive(joinAddrPort(predecessor.Address, config.CalleePort()), true)
 			if err != nil {
-				log.Printf("Predecessor " + Predecessor.Address + " failed a health check!  Attempting to adjust...")
+				log.Printf("Predecessor " + predecessor.Address + " failed a health check!  Attempting to adjust...")
 				log.Print(err)
-				Predecessor = nil
+				predecessor = nil
 			}
 		}
 		time.Sleep(time.Second * 1)
@@ -196,17 +196,17 @@ func CheckPredecessor() {
 // CreateLocalNode creates a local node on its own ring.  It can be inserted into another ring later.
 func CreateLocalNode() {
 	// Initialize the internal table
-	InternalTable = table.NewTable(config.MaxKey())
+	internalTable = table.NewTable(config.MaxKey())
 
 	// Set the variables of this node.
 	var err error
-	RPCCaller, err = rpc.NewCaller(config.CallerPort())
+	rpcCaller, err = rpc.NewCaller(config.CallerPort())
 	if err != nil {
-		panic("RPCCaller failed to initialize")
+		panic("rpcCaller failed to initialize")
 	}
-	RPCCallee, err = rpc.NewCallee(config.CalleePort())
+	rpcCallee, err = rpc.NewCallee(config.CalleePort())
 	if err != nil {
-		panic("RPCCallee failed to initialize")
+		panic("rpcCallee failed to initialize")
 	}
 
 	Address = config.Addr()
@@ -214,39 +214,39 @@ func CreateLocalNode() {
 	Key = key.Hash(Address, config.MaxKey())
 	log.Printf("Keyspace position %d was derived from IP%s\n", Key, config.Addr())
 
-	Predecessor = nil
-	Successor = &RemoteNode{
+	predecessor = nil
+	successor = &RemoteNode{
 		Address: Address,
 		Key:     Key,
 	}
 	// Initialize the finger table for the solo ring configuration
-	Fingers = make([]*RemoteNode, config.NumFingers())
+	fingers = make([]*RemoteNode, config.NumFingers())
 	log.Printf("Finger table size %d was derived from the keyspace size\n", config.NumFingers())
 	for i := uint64(0); i < config.NumFingers(); i++ {
-		Fingers[i] = Successor
+		fingers[i] = successor
 	}
 
 	// Define all of the RPC functions.
 	// For more info, look at Yuchen's caller.go and example_test.go
 	// Go's type "system" is going to make me kill myself.
-	RPCNotify = RPCCaller.Declare(RemoteNode{}, 0, 1*time.Second)
-	RPCFindSuccessor = RPCCaller.Declare(key.NewKey(1), RemoteNode{}, 1*time.Second)
-	RPCGetPredecessor = RPCCaller.Declare(0, RemoteNode{}, 1*time.Second)
-	RPCIsAlive = RPCCaller.Declare(true, true, 1*time.Second)
-	RPCGetKey = RPCCaller.Declare("", GetKeyResponse{}, 5*time.Second)
-	RPCPutKey = RPCCaller.Declare(PutKeyRequest{}, true, 5*time.Second)
-	RPCPutKeyBackup = RPCCaller.Declare(PutKeyRequest{}, 0, 5*time.Second)
-	RPCGetKeyRange = RPCCaller.Declare(GetKeyRangeRequest{}, []table.HashEntry{}, 100*time.Second)
+	rpcNotify = rpcCaller.Declare(RemoteNode{}, 0, 1*time.Second)
+	rpcFindSuccessor = rpcCaller.Declare(key.NewKey(1), RemoteNode{}, 1*time.Second)
+	rpcGetPredecessor = rpcCaller.Declare(0, RemoteNode{}, 1*time.Second)
+	rpcIsAlive = rpcCaller.Declare(true, true, 1*time.Second)
+	rpcGetKey = rpcCaller.Declare("", GetKeyResponse{}, 5*time.Second)
+	rpcPutKey = rpcCaller.Declare(PutKeyRequest{}, true, 5*time.Second)
+	rpcPutKeyBackup = rpcCaller.Declare(PutKeyRequest{}, 0, 5*time.Second)
+	rpcGetKeyRange = rpcCaller.Declare(GetKeyRangeRequest{}, []table.HashEntry{}, 100*time.Second)
 
-	// Hook the RPCCallee into this node's functions
-	RPCCallee.Implement(FindSuccessor)
-	RPCCallee.Implement(Notify)
-	RPCCallee.Implement(GetPredecessor)
-	RPCCallee.Implement(IsAlive)
-	RPCCallee.Implement(PutKeyBackup)
-	RPCCallee.Implement(GetKey)
-	RPCCallee.Implement(PutKey)
-	RPCCallee.Implement(GetKeyRange)
+	// Hook the rpcCallee into this node's functions
+	rpcCallee.Implement(FindSuccessor)
+	rpcCallee.Implement(Notify)
+	rpcCallee.Implement(GetPredecessor)
+	rpcCallee.Implement(IsAlive)
+	rpcCallee.Implement(PutKeyBackup)
+	rpcCallee.Implement(GetKey)
+	rpcCallee.Implement(PutKey)
+	rpcCallee.Implement(GetKeyRange)
 }
 
 //GetPredecessor is a getter for the predecessor, implemented for the sake of RPC calls.
@@ -254,7 +254,7 @@ func CreateLocalNode() {
 //a worthless int as argument.
 func GetPredecessor(void int) RemoteNode {
 	//log.Printf("RPC Call to GetPredecessor!\n")
-	if Predecessor == nil {
+	if predecessor == nil {
 		//log.Printf("Returned self node, no predecessor set.\n")
 		return RemoteNode{
 			Address: Address,
@@ -262,33 +262,33 @@ func GetPredecessor(void int) RemoteNode {
 		}
 	}
 	//log.Printf("Returned predecessor.\n")
-	return *Predecessor
+	return *predecessor
 }
 
 // Join a ring given a node IP address.
 func Join(ring string) {
 	log.Printf("Connecting node to network at %s\n", config.Introducer())
 	ringCallee := joinAddrPort(ring, config.CalleePort())
-	ringSuccessorInterf, err := RPCFindSuccessor(ringCallee, Key)
+	ringSuccessorInterf, err := rpcFindSuccessor(ringCallee, Key)
 	if err != nil {
 		log.Printf("[DIAGNOSTIC] Join failed.  Target: %s", ringCallee)
 		log.Print(err)
-		panic("RPCFindSuccessor failed!")
+		panic("rpcFindSuccessor failed!")
 	}
 	ringSuccessor := ringSuccessorInterf.(RemoteNode)
-	Successor = &ringSuccessor
-	Fingers[0] = &ringSuccessor
-	log.Printf("New successor %d!\n", Successor.Key)
-	log.Printf("My keyspace is (%d, %d)\n", Key, Successor.Key)
+	successor = &ringSuccessor
+	fingers[0] = &ringSuccessor
+	log.Printf("New successor %d!\n", successor.Key)
+	log.Printf("My keyspace is (%d, %d)\n", Key, successor.Key)
 }
 
 func GetKey(keyString string) GetKeyResponse {
 	log.Printf("GetKey(%s)\n", keyString)
-	if !key.Hash(keyString, config.MaxKey()).BetweenEndInclusive(Predecessor.Key, Key) {
+	if !isLocalResponsible(key.Hash(keyString, config.MaxKey())) {
 		log.Printf("GetKey(%s): sorry, it's none of my business\n", keyString)
 		return GetKeyResponse{[]byte{0}, false}
 	}
-	rv, err := InternalTable.Get(keyString)
+	rv, err := internalTable.Get(keyString)
 	if err != nil {
 		log.Printf("GetKey(%s): no such key\n", keyString)
 		return GetKeyResponse{[]byte{0}, false}
@@ -301,11 +301,11 @@ func PutKey(pkr PutKeyRequest) bool {
 	keyString := pkr.KeyString
 	data := pkr.Data
 	log.Printf("PutKey(%s)\n", keyString)
-	if !key.Hash(keyString, config.MaxKey()).BetweenEndInclusive(Predecessor.Key, Key) {
+	if !isLocalResponsible(key.Hash(keyString, config.MaxKey())) {
 		log.Printf("PutKey(%s): sorry, it's none of my business\n", keyString)
 		return false
 	}
-	InternalTable.Put(keyString, data)
+	internalTable.Put(keyString, data)
 	log.Printf("PutKey(%s): success\n", keyString)
 	return true
 }
@@ -313,12 +313,12 @@ func PutKey(pkr PutKeyRequest) bool {
 func PutKeyBackup(pkr PutKeyRequest) int {
 	keyString := pkr.KeyString
 	data := pkr.Data
-	InternalTable.Put(keyString, data)
+	internalTable.Put(keyString, data)
 	return 1
 }
 
 func GetKeyRange(gkr GetKeyRangeRequest) []table.HashEntry {
-	return InternalTable.GetRange(gkr.Start, gkr.End)
+	return internalTable.GetRange(gkr.Start, gkr.End)
 }
 
 func Start() {
@@ -328,8 +328,8 @@ func Start() {
 	}
 	log.Printf("Creating local node @IP %s on its own ring of size %d...\n", config.Addr(), config.MaxKey())
 	CreateLocalNode()
-	RPCCallee.Start()
-	RPCCaller.Start()
+	rpcCallee.Start()
+	rpcCaller.Start()
 	if !config.Creator() {
 		Join(config.Introducer())
 	}
@@ -339,59 +339,13 @@ func Start() {
 	go CheckPredecessor()
 }
 
-/*
- * The following is new
- */
-
 func joinAddrPort(addr string, port uint16) string {
 	return fmt.Sprintf("%s:%d", addr, port)
 }
 
 func isLocalResponsible(k key.Key) bool {
-	if Predecessor == nil {
+	if predecessor == nil {
 		return false
 	}
-	return k.BetweenEndInclusive(Predecessor.Key, Key)
-}
-
-func Put(k string, v []byte) error {
-	hashk := key.Hash(k, config.MaxKey())
-	request := PutKeyRequest{k, v}
-	if isLocalResponsible(hashk) {
-		if !PutKey(request) {
-			return fmt.Errorf("put failed")
-		}
-		return nil
-	}
-	remote := joinAddrPort(FindSuccessor(hashk).Address, config.CalleePort())
-	ok, err := RPCPutKey(remote, request)
-	if err != nil {
-		return err
-	}
-	if !ok.(bool) {
-		return fmt.Errorf("put failed")
-	}
-	return nil
-}
-
-func Get(k string) ([]byte, error) {
-	hashk := key.Hash(k, config.MaxKey())
-	var response GetKeyResponse
-	if isLocalResponsible(hashk) {
-		response = GetKey(k)
-		if response.Error == false {
-			return nil, fmt.Errorf("get failed")
-		}
-		return response.Data, nil
-	}
-	remote := joinAddrPort(FindSuccessor(hashk).Address, config.CalleePort())
-	res, err := RPCGetKey(remote, k)
-	response = res.(GetKeyResponse)
-	if err != nil {
-		return nil, err
-	}
-	if response.Error == false {
-		return nil, fmt.Errorf("get failed")
-	}
-	return response.Data, nil
+	return k.BetweenEndInclusive(predecessor.Key, Key)
 }

@@ -16,7 +16,6 @@ var (
 	isCreator  bool
 	maxKey     uint64
 	numFingers uint64
-	username   string
 )
 
 // GetOutboundIP gets preferred outbound IP of this machine using a filthy hack
@@ -71,13 +70,6 @@ func Init() error {
 		"Create a new node and connect to the specified ring address",
 	)
 
-	flag.StringVar(
-		&username,
-		"u",
-		"",
-		"the username to use",
-	)
-
 	flag.Parse()
 
 	if bits == 0 {
@@ -106,9 +98,4 @@ func MaxKey() uint64 {
 // NumFingers returns the size of a finger table
 func NumFingers() uint64 {
 	return numFingers
-}
-
-// Username returns the username of the node
-func Username() string {
-	return username
 }
