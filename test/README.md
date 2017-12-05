@@ -6,12 +6,12 @@ Under the directory **bitmesh**, run following:
 docker build -t bitmesh -f test/Dockerfile .
 ```
 
-### Run chord node
+## Run chord node
 ```
 docker run -it bitmesh chord -n 10 [-c 172.17.0.2]
 ```
 
-### Run dht test (must have some chord nodes running)
+## Run dht test (must have some chord nodes running)
 ```
 docker run -it bitmesh dht
 ```
