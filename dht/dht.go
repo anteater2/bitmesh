@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/anteater2/bitmesh/chord"
-	"github.com/anteater2/bitmesh/chord/key"
 	"github.com/anteater2/bitmesh/rpc"
 )
 
@@ -31,7 +30,7 @@ func New(node string, chordPort uint16, receivePort uint16) (*DHT, error) { // c
 		caller:    caller,
 		rpcGet:    caller.Declare("", chord.GetKeyResponse{}, 3*time.Second),
 		rpcPut:    caller.Declare(chord.PutKeyRequest{}, true, 3*time.Second),
-		rpcLookup: caller.Declare(key.Key(0), chord.RemoteNode{}, 5*time.Second),
+		rpcLookup: caller.Declare(chord.Key(0), chord.RemoteNode{}, 5*time.Second),
 	}, nil
 }
 
@@ -42,7 +41,7 @@ func (dht *DHT) Start() {
 
 // Put puts a key-value pair into dht.
 func (dht *DHT) Put(k string, v string) error {
-	hashk := key.Hash(k, 1<<10)
+	hashk := chord.Hash(k, 1<<10)
 	request := chord.PutKeyRequest{KeyString: k, Data: []byte(v)}
 	remoteNode, err := dht.rpcLookup(dht.node, hashk)
 	if err != nil {
@@ -61,7 +60,7 @@ func (dht *DHT) Put(k string, v string) error {
 
 // Get gets the value corresponding to the key from dht
 func (dht *DHT) Get(k string) (string, error) {
-	hashk := key.Hash(k, 1<<10)
+	hashk := chord.Hash(k, 1<<10)
 	remoteNode, err := dht.rpcLookup(dht.node, hashk)
 	if err != nil {
 		return "", err
