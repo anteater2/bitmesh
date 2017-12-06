@@ -22,6 +22,7 @@ func initNodeCallee(port uint16) error {
 	callee.Implement(handleGet)
 	callee.Implement(handlePut)
 	callee.Implement(handleGetPredecessor)
+	callee.Implement(handleGetSuccessor)
 	callee.Implement(handleGetKeyRange)
 
 	return nil
@@ -121,6 +122,18 @@ type getPredecessorReply struct {
 
 func handleGetPredecessor(call getPredecessorCall) getPredecessorReply {
 	return getPredecessorReply{getPredecessor()}
+}
+
+// ----------------------------------------------------------------------------
+
+type getSuccessorCall struct{}
+
+type getSuccessorReply struct {
+	Node RemoteNode
+}
+
+func handleGetSuccessor(call getSuccessorCall) getSuccessorReply {
+	return getSuccessorReply{*successor}
 }
 
 // ----------------------------------------------------------------------------
