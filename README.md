@@ -25,7 +25,7 @@ make dht
 
 To run node caller test,
 ```
-make node_caller
+make caller
 ```
 
 To stop all containers,
