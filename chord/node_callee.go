@@ -18,6 +18,7 @@ func initNodeCallee(port uint16) error {
 	callee.Implement(handleIsAliveCall)
 	callee.Implement(handleNotifyCall)
 	callee.Implement(handleFindSuccessor)
+	callee.Implement(handleGetFingers)
 	callee.Implement(handleGet)
 	callee.Implement(handlePut)
 	callee.Implement(handleGetPredecessor)
@@ -138,3 +139,18 @@ func handleGetKeyRange(call getKeyRangeCall) getKeyRangeReply {
 }
 
 // ----------------------------------------------------------------------------
+
+type getFingersCall struct{}
+
+type getFingersReply struct {
+	Fingers []RemoteNode
+}
+
+func handleGetFingers(call getFingersCall) getFingersReply {
+	reply := getFingersReply{}
+	reply.Fingers = make([]RemoteNode, len(fingers))
+	for i, e := range fingers {
+		reply.Fingers[i] = *e
+	}
+	return reply
+}

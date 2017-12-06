@@ -17,3 +17,8 @@ docker run -it bitmesh dht
 ```
 The client will try to put 1000 key value pairs and randomly get 100 out of them.
 If any of them are lost or changed, the program will panic.
+
+## Run node caller test (must have first chord nodes running)
+```
+docker run -it bitmesh node_caller
+```

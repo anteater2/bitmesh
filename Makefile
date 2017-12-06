@@ -14,6 +14,9 @@ node:
 dht:
 	docker run -it bitmesh dht
 
+caller:
+	docker run -it bitmesh node_caller
+
 stop:
 	docker stop $(shell docker ps -aq)
 

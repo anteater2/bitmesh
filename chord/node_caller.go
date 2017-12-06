@@ -11,6 +11,7 @@ type NodeCaller struct {
 	findSuccessor  rpc.RemoteFunc
 	getPredecessor rpc.RemoteFunc
 	getKeyRange    rpc.RemoteFunc
+	getFingers     rpc.RemoteFunc
 	get            rpc.RemoteFunc
 	put            rpc.RemoteFunc
 }
@@ -28,6 +29,7 @@ func NewNodeCaller(port uint16) (*NodeCaller, error) {
 		findSuccessor:  caller.Declare(findSuccessorCall{}, findSuccessorReply{}, 1*time.Second),
 		getPredecessor: caller.Declare(getPredecessorCall{}, getPredecessorReply{}, 1*time.Second),
 		getKeyRange:    caller.Declare(getKeyRangeCall{}, getKeyRangeReply{}, 5*time.Second),
+		getFingers:     caller.Declare(getFingersCall{}, getFingersReply{}, 1*time.Second),
 		get:            caller.Declare(getCall{}, getReply{}, 5*time.Second),
 		put:            caller.Declare(putCall{}, putReply{}, 5*time.Second),
 	}, nil
@@ -103,4 +105,13 @@ func (nc *NodeCaller) Put(node string, k string, v []byte) error {
 		return err
 	}
 	return reply.(putReply).Error
+}
+
+// GetFingers ...
+func (nc *NodeCaller) GetFingers(node string) ([]RemoteNode, error) {
+	reply, err := nc.getFingers(node, getFingersCall{})
+	if err != nil {
+		return nil, err
+	}
+	return reply.(getFingersReply).Fingers, nil
 }
