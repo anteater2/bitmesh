@@ -8,7 +8,7 @@ docker build -t bitmesh -f test/Dockerfile .
 
 ## Run chord node
 ```
-docker run -it bitmesh chord -n 10 [-c 172.17.0.2]
+docker run -it bitmesh chord -n 10 [-c 172.17.0.2:2001]
 ```
 
 ## Run dht test (must have some chord nodes running)

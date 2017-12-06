@@ -28,8 +28,8 @@ func New(node string, chordPort uint16, receivePort uint16) (*DHT, error) { // c
 		node:      node,
 		chordPort: chordPort,
 		caller:    caller,
-		rpcGet:    caller.Declare("", chord.GetKeyResponse{}, 3*time.Second),
-		rpcPut:    caller.Declare(chord.PutKeyRequest{}, true, 3*time.Second),
+		rpcGet:    caller.Declare("", chord.GetResponse{}, 3*time.Second),
+		rpcPut:    caller.Declare(chord.PutRequest{}, true, 3*time.Second),
 		rpcLookup: caller.Declare(chord.Key(0), chord.RemoteNode{}, 5*time.Second),
 	}, nil
 }
@@ -42,13 +42,13 @@ func (dht *DHT) Start() {
 // Put puts a key-value pair into dht.
 func (dht *DHT) Put(k string, v string) error {
 	hashk := chord.Hash(k, 1<<10)
-	request := chord.PutKeyRequest{KeyString: k, Data: []byte(v)}
+	request := chord.PutRequest{KeyString: k, Data: []byte(v)}
 	remoteNode, err := dht.rpcLookup(dht.node, hashk)
 	if err != nil {
 		return err
 	}
 	remote := remoteNode.(chord.RemoteNode).Address
-	ok, err := dht.rpcPut(joinAddrPort(remote, dht.chordPort), request)
+	ok, err := dht.rpcPut(remote, request)
 	if err != nil {
 		return err
 	}
@@ -66,8 +66,8 @@ func (dht *DHT) Get(k string) (string, error) {
 		return "", err
 	}
 	remote := remoteNode.(chord.RemoteNode).Address
-	res, err := dht.rpcGet(joinAddrPort(remote, dht.chordPort), k)
-	response := res.(chord.GetKeyResponse)
+	res, err := dht.rpcGet(remote, k)
+	response := res.(chord.GetResponse)
 	if err != nil {
 		return "", err
 	}
@@ -75,8 +75,4 @@ func (dht *DHT) Get(k string) (string, error) {
 		return "", fmt.Errorf("get failed")
 	}
 	return string(response.Data), nil
-}
-
-func joinAddrPort(addr string, port uint16) string {
-	return fmt.Sprintf("%s:%d", addr, port)
 }
