@@ -46,8 +46,8 @@ This runs first, node, and dht and pipes the aggregate output to localhost:3000 
 
 This waits 30 seconds before starting dht so that the finger tables have time to fully initialize.
 
-If this broke and you need to kill a lot of docker containers, try this:
+If this broke and you need to kill a lot of docker containers, try:
 ```
-docker kill $(docker ps -a -q);  docker rm $(docker ps -a -q);
+mk deepclean
 ```
-I can't get the Makefile to work with it, so I'll just leave it.
+*THIS WILL KILL AND REMOVE EVERY DOCKER CONTAINER ON YOUR MACHINE*

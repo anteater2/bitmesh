@@ -32,5 +32,4 @@ nc:
 	(sleep 30 && docker run -t bitmesh dht))|nc localhost 3000
 
 deepclean:
-	docker kill $(docker ps -a -q)
-	docker rm $(docker ps -a -q)
+	docker kill $(shell docker ps -a -q);	docker rm $(shell docker ps -a -q)
