@@ -26,21 +26,6 @@ type RemoteNode struct {
 	Key     Key
 }
 
-// closestPrecedingNode finds the closest preceding node to the key in this node's finger table.
-// This doesn't need any RPC.
-func closestPrecedingNode(key Key) RemoteNode {
-	for i := config.numFingers - 1; i > 0; i-- { // WARNING: GO DOES THIS i>0 CHECK AT THE END OF THE LOOP!
-		//log.Printf("Checking finger %d\n", i)
-		if fingers[i] == nil {
-			panic("You attempted to find ClosestPrecedingNode without an initialized finger table!")
-		}
-		if fingers[i].Key.BetweenExclusive(my.key, key) {
-			return *fingers[i]
-		}
-	}
-	return RemoteNode{Address: my.address, Key: my.key}
-}
-
 // CreateLocalNode creates a local node on its own ring.  It can be inserted into another ring later.
 func createLocalNode() {
 	// Initialize the internal table
@@ -109,6 +94,21 @@ func join(ring string) {
 	log.Printf("My keyspace is (%d, %d)\n", my.key, successor.Key)
 }
 
+// closestPrecedingNode finds the closest preceding node to the key in this node's finger table.
+// This doesn't need any RPC.
+func closestPrecedingNode(key Key) RemoteNode {
+	for i := config.numFingers - 1; i > 0; i-- { // WARNING: GO DOES THIS i>0 CHECK AT THE END OF THE LOOP!
+		//log.Printf("Checking finger %d\n", i)
+		if fingers[i] == nil {
+			panic("You attempted to find ClosestPrecedingNode without an initialized finger table!")
+		}
+		if fingers[i].Key.BetweenExclusive(my.key, key) {
+			return *fingers[i]
+		}
+	}
+	return RemoteNode{Address: my.address, Key: my.key}
+}
+
 func isLocalResponsible(k Key) bool {
 	if predecessor == nil {
 		return false
@@ -143,7 +143,7 @@ func findSuccessor(key Key) RemoteNode {
 	return rv
 }
 
-// getNotified
+// get notified
 func notify(node RemoteNode) {
 	if predecessor == nil || node.Key.BetweenExclusive(predecessor.Key, my.key) {
 		log.Printf("Got notify from %s!  New predecessor: %d\n", node.Address, node.Key)

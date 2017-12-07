@@ -6,21 +6,19 @@ import (
 
 // DHT ...
 type DHT struct {
-	node      string
-	chordPort uint16
-	caller    *chord.NodeCaller
+	node   string
+	caller *chord.NodeCaller
 }
 
 // New creates a client to access DHT
-func New(node string, chordPort uint16, receivePort uint16) (*DHT, error) { // configuration
+func New(node string, receivePort uint16) (*DHT, error) { // configuration
 	caller, err := chord.NewNodeCaller(receivePort)
 	if err != nil {
 		return nil, err
 	}
 	return &DHT{
-		node:      node,
-		chordPort: chordPort,
-		caller:    caller,
+		node:   node,
+		caller: caller,
 	}, nil
 }
 

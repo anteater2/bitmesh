@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	t, err := dht.New("172.17.0.2:2001", 2001, 2000)
+	t, err := dht.New("172.17.0.2:2001", 2000)
 	if err != nil {
 		panic(err)
 	}
