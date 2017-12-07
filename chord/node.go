@@ -45,7 +45,7 @@ func createLocalNode() {
 	my.address = fmt.Sprintf("%s:%d", config.addr, config.calleePort)
 
 	my.key = Hash(my.address, config.maxKey)
-	log.Printf("Keyspace position %d was derived from address %s\n", my.key, my.address)
+	log.Printf("[NODE %d] Keyspace position %d was derived from address %s\n", my.key, my.key, my.address)
 
 	predecessor = nil
 	successor = &RemoteNode{
@@ -54,7 +54,7 @@ func createLocalNode() {
 	}
 	// Initialize the finger table for the solo ring configuration
 	fingers = make([]*RemoteNode, config.numFingers)
-	log.Printf("Finger table size %d was derived from the keyspace size\n", config.numFingers)
+	log.Printf("[NODE %d] Finger table size %d was derived from the keyspace size\n", my.key, config.numFingers)
 	for i := uint64(0); i < config.numFingers; i++ {
 		fingers[i] = successor
 	}
@@ -81,8 +81,8 @@ func Start() {
 
 // Join a ring given a node IP address.
 func join(ring string) {
-	log.Printf("Connecting node to network at %s\n", config.introducer)
-	ringSuccessor, err := caller.FindSuccessor(ring, my.key)
+	log.Printf("[NODE %d] Connecting node to network at %s\n", my.key, config.introducer)
+	ringSuccessorInterf, err := rpcFindSuccessor(ring, my.key)
 	if err != nil {
 		log.Printf("[DIAGNOSTIC] Join failed.  Target: %s", ring)
 		log.Print(err)
@@ -90,8 +90,8 @@ func join(ring string) {
 	}
 	successor = &ringSuccessor
 	fingers[0] = &ringSuccessor
-	log.Printf("New successor %d!\n", successor.Key)
-	log.Printf("My keyspace is (%d, %d)\n", my.key, successor.Key)
+	log.Printf("[NODE %d] New successor %d!\n", my.key, successor.Key)
+	log.Printf("[NODE %d] My keyspace is (%d, %d)\n", my.key, my.key, successor.Key)
 }
 
 // closestPrecedingNode finds the closest preceding node to the key in this node's finger table.
@@ -146,7 +146,7 @@ func findSuccessor(key Key) RemoteNode {
 // get notified
 func notify(node RemoteNode) {
 	if predecessor == nil || node.Key.BetweenExclusive(predecessor.Key, my.key) {
-		log.Printf("Got notify from %s!  New predecessor: %d\n", node.Address, node.Key)
+		log.Printf("[NODE %d] Got notify from %s!  New predecessor: %d\n", my.key, node.Address, node.Key)
 		predecessor = &node
 		if predecessor.Address != my.address {
 			rv, err := caller.GetKeyRange(predecessor.Address, my.key, predecessor.Key)
@@ -182,28 +182,30 @@ func getPredecessor() RemoteNode {
 // }
 
 func getKey(keyString string) ([]byte, error) {
-	log.Printf("GetKey(%s)\n", keyString)
+	log.Printf("[NODE %d] GetKey(%s)\n", my.key, keyString)
 	if !isLocalResponsible(Hash(keyString, config.maxKey)) {
+		log.Printf("[NODE %d] GetKey(%s): sorry, it's none of my business\n", my.key, keyString)
+		return GetResponse{[]byte{0}, false}
 		log.Printf("GetKey(%s): sorry, it's none of my business\n", keyString)
 		return []byte{0}, fmt.Errorf("wrong node to get the key")
 	}
 	rv, err := internalTable.Get(keyString)
 	if err != nil {
-		log.Printf("GetKey(%s): no such key\n", keyString)
-		return []byte{0}, fmt.Errorf("no such key")
+		log.Printf("[NODE %d] GetKey(%s): no such key\n", my.key, keyString)
+		return GetResponse{[]byte{0}, false}
 	}
-	log.Printf("GetKey(%s): success\n", keyString)
-	return rv, nil
+	log.Printf("[NODE %d] GetKey(%s): success\n", my.key, keyString)
+	return GetResponse{rv, true}
 }
 
 func putKey(key string, value []byte) error {
-	log.Printf("PutKey(%s)\n", key)
+	log.Printf("[NODE %d] PutKey(%s)\n",my.key, key)
 	if !isLocalResponsible(Hash(key, config.maxKey)) {
-		log.Printf("PutKey(%s): sorry, it's none of my business\n", key)
+		log.Printf("[NODE %d] PutKey(%s): sorry, it's none of my business\n",my.key, key)
 		return fmt.Errorf("wrong node to get the key")
 	}
 	internalTable.Put(key, value)
-	log.Printf("PutKey(%s): success\n", key)
+	log.Printf("[NODE %d] PutKey(%s): success\n", my.key, key)
 	return nil
 }
 
@@ -252,10 +254,10 @@ func stabilize() {
 			}
 		}
 		if remote.Key.BetweenExclusive(my.key, successor.Key) {
-			log.Printf("New successor %d\n", remote.Key)
+			log.Printf("[NODE %d] New successor %d\n", my.key, remote.Key)
 			successor = &remote
 			fingers[0] = &remote
-			log.Printf("My keyspace is (%d, %d)\n", my.key, successor.Key)
+			log.Printf("[NODE %d] My keyspace is (%d, %d)\n", my.key, my.key, successor.Key)
 		}
 		caller.Notify(successor.Address, RemoteNode{
 			Address: my.address,
@@ -268,7 +270,7 @@ func stabilize() {
 // fixFingers is the finger-table updater.
 // Again, this is a goroutine and never terminates.
 func fixFingers() {
-	log.Printf("Starting to finger nodes...\n") //hehehe
+	log.Printf("[NODE %d] Starting to finger nodes...\n", my.key) //hehehe
 	currentFingerIndex := uint64(0)
 	for true {
 		currentFingerIndex++
@@ -278,7 +280,7 @@ func fixFingers() {
 		newFinger := findSuccessor(Key(val))
 		//log.Printf("Updating finger %d (pointing to key %d) of %d to point to node %s\n", currentFingerIndex, val, len(Fingers), newFinger.Address)
 		if newFinger.Address != fingers[currentFingerIndex].Address {
-			log.Printf("Updating finger %d (key %d) of %d to point to node %s (key %d)\n", currentFingerIndex, val, len(fingers)-1, newFinger.Address, newFinger.Key)
+			log.Printf("[NODE %d] Updating finger %d (key %d) of %d to point to node %s (key %d)\n", my.key, currentFingerIndex, val, len(fingers)-1, newFinger.Address, newFinger.Key)
 		}
 		fingers[currentFingerIndex] = &newFinger
 		time.Sleep(time.Second * 1)

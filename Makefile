@@ -22,3 +22,15 @@ stop:
 
 clean:
 	docker rm $(shell docker ps -qa --no-trunc --filter "status=exited")
+
+nc:
+	(docker run -t bitmesh chord -n 10 &\
+	docker run -t bitmesh chord -n 10 -c 172.17.0.2:2001 &\
+	docker run -t bitmesh chord -n 10 -c 172.17.0.2:2001 &\
+	docker run -t bitmesh chord -n 10 -c 172.17.0.2:2001 &\
+	docker run -t bitmesh chord -n 10 -c 172.17.0.2:2001 &\
+	(sleep 30 && docker run -t bitmesh dht))|nc localhost 3000
+
+deepclean:
+	docker kill $(docker ps -a -q)
+	docker rm $(docker ps -a -q)
