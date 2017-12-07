@@ -19,6 +19,7 @@ var fingers []*RemoteNode
 var predecessor *RemoteNode
 var successor *RemoteNode
 var caller *NodeCaller
+var doubleSuccessor *RemoteNode
 
 // RemoteNode holds information for connecting to a remote node
 type RemoteNode struct {
@@ -66,17 +67,18 @@ func Start() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Creating local node @IP %s on its own ring of size %d...\n", config.addr, config.maxKey)
+	log.Printf("[ANON] Creating local node @IP %s on its own ring of size %d...\n", config.addr, config.maxKey)
 	createLocalNode()
 	startNodeCallee()
 	caller.Start()
+	go stabilize()
 	if !config.isCreator {
 		join(config.introducer)
 	}
-	log.Printf("Beginning stabilizer...\n")
-	go stabilize()
+	log.Printf("[NODE %d] Beginning stabilizer...\n", my.key)
 	go fixFingers()
 	go checkPredecessor()
+	//go checkSuccessor()
 }
 
 // Join a ring given a node IP address.
@@ -84,7 +86,7 @@ func join(ring string) {
 	log.Printf("[NODE %d] Connecting node to network at %s\n", my.key, config.introducer)
 	ringSuccessor, err := caller.FindSuccessor(ring, my.key)
 	if err != nil {
-		log.Printf("[DIAGNOSTIC] Join failed.  Target: %s", ring)
+		log.Printf("[NODE %d] [DIAGNOSTIC] Join failed.  Target: %s", my.key, ring)
 		log.Print(err)
 		panic("rpcFindSuccessor failed!")
 	}
@@ -92,6 +94,7 @@ func join(ring string) {
 	fingers[0] = &ringSuccessor
 	log.Printf("[NODE %d] New successor %d!\n", my.key, successor.Key)
 	log.Printf("[NODE %d] My keyspace is (%d, %d)\n", my.key, my.key, successor.Key)
+	findDoubleSuccessor()
 }
 
 // closestPrecedingNode finds the closest preceding node to the key in this node's finger table.
@@ -109,6 +112,7 @@ func closestPrecedingNode(key Key) RemoteNode {
 	return RemoteNode{Address: my.address, Key: my.key}
 }
 
+// Check if this node is responsible for a key.
 func isLocalResponsible(k Key) bool {
 	if predecessor == nil {
 		return false
@@ -129,16 +133,19 @@ func findSuccessor(key Key) RemoteNode {
 	target := closestPrecedingNode(key)
 	if target.Address == my.address {
 		log.Printf("[DIAGNOSTIC] Infinite loop detected!\n")
-		log.Printf("[DIAGNOSTIC] This is likely because of a bad finger table.\n")
-		panic("This is probably a serious bug.")
+		log.Printf("[DIAGNOSTIC] This is likely because of a bad finger table. Skip forward 1.\n")
+		target = *successor
 	}
 	// Now, we have to do an RPC on target to find the successor.
 
 	rv, err := caller.FindSuccessor(target.Address, key)
 	if err != nil {
 		log.Printf("[DIAGNOSTIC] Remote target is " + target.Address + "\n")
-		log.Print(err)
-		panic("rpcFindSuccessor failed!")
+		log.Printf("[DIAGNOSTIC] Target did not respond (bad finger?) setting to successor %s(%d)\n", successor.Address, successor.Key)
+		rv, err = caller.FindSuccessor(successor.Address, key)
+		if err != nil {
+			panic("Ring integrity too low to recover from missing successor!")
+		}
 	}
 	return rv
 }
@@ -157,6 +164,7 @@ func notify(node RemoteNode) {
 				internalTable.Put(entry.Key, entry.Value)
 			}
 		}
+		findDoubleSuccessor()
 	}
 }
 
@@ -209,6 +217,29 @@ func getKeyRange(start Key, end Key) []HashEntry {
 	return internalTable.GetRange(start, end)
 }
 
+func findDoubleSuccessor() {
+	log.Printf("Trying to find double successor (i.e. the node after %s(%d))", successor.Address, successor.Key)
+	nextSuccessor, err := caller.FindSuccessor(successor.Address, successor.Key+1)
+	if err != nil {
+		log.Print(err)
+		panic("Not enough ring integrity left to recover!")
+	}
+	//nextSuccessor := nextSuccessorInterf.(RemoteNode)
+	if doubleSuccessor == nil || nextSuccessor.Key != doubleSuccessor.Key {
+		log.Printf("New doubleSuccessor %d\n", nextSuccessor.Key)
+		doubleSuccessor = &nextSuccessor
+	}
+}
+
+func purifyFingerTables(node *RemoteNode) {
+	for i := uint64(0); i < config.numFingers; i-- {
+		if fingers[i].Key == node.Key {
+			log.Printf("[NODE %d] Purifying finger %d to no longer point to %d", my.key, i, node.Key)
+			fingers[i] = successor
+		}
+	}
+}
+
 /*****************************************************************************
  * Periodically run                                                          *
  *****************************************************************************/
@@ -220,6 +251,23 @@ func checkPredecessor() {
 			if !caller.IsAlive(predecessor.Address) {
 				log.Printf("Predecessor " + predecessor.Address + " failed a health check!  Attempting to adjust...")
 				predecessor = nil
+				findDoubleSuccessor()
+			}
+		}
+		time.Sleep(time.Second * 1)
+	}
+}
+
+// checkSuccessor is a goroutine that keeps tabs on the successor and updates itself if the successor leaves the network.
+func checkSuccessor() {
+	for true {
+		if successor != nil {
+			if !caller.IsAlive(successor.Address) {
+				log.Printf("Successor " + successor.Address + " failed a health check!  Attempting to adjust...")
+				purifyFingerTables(successor)
+				*successor = *doubleSuccessor
+				log.Printf("My keyspace is (%d, %d)\n", my.key, successor.Key)
+				findDoubleSuccessor()
 			}
 		}
 		time.Sleep(time.Second * 1)
@@ -241,19 +289,25 @@ func stabilize() {
 			remote = *predecessor
 		} else {
 			remote, err = caller.GetPredecessor(successor.Address)
-			if err != nil { //TODO: Make the error mean something so we can check it here!
-				log.Printf("[DIAGNOSTIC] Stabilization call failed!")
-				log.Printf("[DIAGNOSTIC] Error: " + strconv.Itoa(int(remote.Key)))
+			if err != nil { // This is caused by the successor failing to respond (CHKSUC)
+				log.Printf("[NODE %d][DIAGNOSTIC] Stabilization call failed!", my.key)
+				log.Printf("[NODE %d][DIAGNOSTIC] Error: "+strconv.Itoa(int(remote.Key)), my.key)
 				log.Print(err)
-				log.Printf("[DIAGNOSTIC] Assuming that the error is the result of a successor node disconnection. Jumping new successor: " + fingers[1].Address)
-				successor = fingers[1]
+				log.Printf("[NODE %d][DIAGNOSTIC] Assuming that the error is the result of a successor node disconnection. Replacing with double successor: "+doubleSuccessor.Address, my.key)
+				purifyFingerTables(successor)
+				*successor = *doubleSuccessor
+				log.Printf("My keyspace is (%d, %d)\n", my.key, successor.Key)
+				findDoubleSuccessor()
+				time.Sleep(time.Second * 10)
+				continue
 			}
 		}
-		if remote.Key.BetweenExclusive(my.key, successor.Key) {
+		if remote.Key.BetweenExclusive(my.key, successor.Key) && caller.IsAlive(remote.Address) {
 			log.Printf("New successor %d\n", remote.Key)
 			successor = &remote
 			fingers[0] = &remote
 			log.Printf("My keyspace is (%d, %d)\n", my.key, successor.Key)
+			findDoubleSuccessor()
 		}
 		caller.Notify(successor.Address, RemoteNode{
 			Address: my.address,
