@@ -1,6 +1,48 @@
-# Bitmesh DHT
+# Bitmesh Chord Node
+## Structure
+```node.go``` is the only file that is responsible for everything.
+## Protocol
+Node-to-node communications use RPC based around the Go object serialization format (gob).
 
-## Tests on Docker network
+Some RPC calls are documented in the MIT Chord Paper:
+
+https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
+
+Extra RPC calls exist to allow for actual Get/Put.
+## Implementation
+Each node implements callee receivers for:
+
+```FindSuccessor(key uint32)```
+
+```Notify(node RemoteNode)```
+
+```GetPredecessor()```
+
+```IsAlive() //but this one might be hard```
+
+They should also define caller interfaces for each. The periodic functions:
+
+```Stabilize```
+
+```FixFingers```
+
+```CheckPredecessor // again, this is hard, and currently not implemented```
+
+are goroutines with sleeps.
+
+## IP Resolution
+Each node needs to know its own IP, because the RPC library definitely doesn't.
+This is handled in a really hacky and sort of disgusting way: we attempt to connect to Google's DNS servers at 8.8.8.8.
+We don't actually care about the DNS server, but when the connection is made we can snoop to see what local IP is bound to it.
+
+## Ports
+Callers send on port 2000.
+Callees receive on port 2001.
+
+## Fault tolerance
+A fully calibrated/set up ring should be able to handle a single node going offline without losing data or breaking.
+
+# Docker Testing
 See the directory test. Or,
 
 To build docker images,
