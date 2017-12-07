@@ -9,10 +9,13 @@ first:
 	docker run -it bitmesh chord -n 10
 
 node:
-	docker run -it bitmesh chord -n 10 -c 172.17.0.2
+	docker run -it bitmesh chord -n 10 -c 172.17.0.2:2001
 
 dht:
 	docker run -it bitmesh dht
+
+caller:
+	docker run -it bitmesh node_caller
 
 stop:
 	docker stop $(shell docker ps -aq)
