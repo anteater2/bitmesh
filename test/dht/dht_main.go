@@ -16,14 +16,14 @@ func main() {
 
 	max := 1000
 	for i := 0; i < max; i++ {
-		k := fmt.Sprintf("%d", i)
+		k := fmt.Sprintf("Test Key %d", i)
 		err := t.Put(k, k)
 		if err != nil {
 			panic(err)
 		}
 	}
 	for i := 0; i < 100; i++ {
-		k := fmt.Sprintf("%d", rand.Int()%max)
+		k := fmt.Sprintf("Test Key %d", rand.Int()%max)
 		v, err := t.Get(k)
 		if err != nil {
 			panic(err)
