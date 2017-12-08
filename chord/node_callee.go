@@ -74,7 +74,7 @@ func handleFindSuccessor(call findSuccessorCall, pass rpc.PassFunc) (findSuccess
 	if target.Address == my.address {
 		log.Printf("[DIAGNOSTIC] Infinite loop detected!\n")
 		log.Printf("[DIAGNOSTIC] This is likely because of a bad finger table.\n")
-		panic("This is probably a serious bug.")
+		target = *successor
 	}
 	pass(target.Address, call)
 	return findSuccessorReply{}, false
