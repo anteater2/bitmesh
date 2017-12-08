@@ -40,7 +40,8 @@ Callers send on port 2000.
 Callees receive on port 2001.
 
 ## Fault tolerance
-A fully calibrated/set up ring should be able to handle a single node going offline without losing data or breaking.
+A fully calibrated/set up ring should be able to handle a single node going offline without losing data or breaking.<br>
+This doesn't mean that nodes can be removed frequently; if a node fails, the network has to fix its successor lists and otherwise adjust before it can tolerate another one.
 
 # Docker Testing
 See the directory test. Or,
@@ -60,7 +61,7 @@ To run more chord nodes,
 make node
 ```
 
-To run dht test,
+To run DHT test,
 ```
 make dht
 ```
@@ -80,7 +81,7 @@ To clean up containers,
 make clean
 ```
 
-To run a full network test and send the output through a network socket:
+To run a full DHT test and send the output through a network socket:
 ```
 make nc
 ```
@@ -88,8 +89,8 @@ This runs first, node, and dht and pipes the aggregate output to localhost:3000 
 
 This waits 30 seconds before starting dht so that the finger tables have time to fully initialize.
 
-If this broke and you need to kill a lot of docker containers, try:
+If this broke and you need to kill a lot of docker containers, try:<br>
+**CAUTION: THIS WILL KILL AND REMOVE EVERY DOCKER CONTAINER ON YOUR MACHINE!**
 ```
 mk deepclean
 ```
-*THIS WILL KILL AND REMOVE EVERY DOCKER CONTAINER ON YOUR MACHINE*
