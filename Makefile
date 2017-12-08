@@ -18,10 +18,10 @@ caller:
 	docker run -it bitmesh node_caller
 
 stop:
-	docker stop $(shell docker ps -aq)
+	@docker stop $(shell docker ps -aq)
 
 clean:
-	docker rm $(shell docker ps -qa --no-trunc --filter "status=exited")
+	@docker rm $(shell docker ps -qa --no-trunc --filter "status=exited")
 
 nc:
 	(docker run -t bitmesh chord -n 10 &\

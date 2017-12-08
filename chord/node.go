@@ -61,37 +61,34 @@ func createLocalNode() {
 }
 
 // Start ...
-func Start() {
-	err := Init()
+func Start(addr string, calleePort uint16, callerPort uint16, bits uint64) error {
+	err := Init(addr, calleePort, callerPort, bits)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	log.Printf("Creating local node @IP %s on its own ring of size %d...\n", config.addr, config.maxKey)
 	createLocalNode()
 	startNodeCallee()
 	caller.Start()
-	if !config.isCreator {
-		join(config.introducer)
-	}
 	log.Printf("Beginning stabilizer...\n")
 	go stabilize()
 	go fixFingers()
 	go checkPredecessor()
+	return nil
 }
 
 // Join a ring given a node IP address.
-func join(ring string) {
+func Join(ring string) error {
 	log.Printf("[NODE %d] Connecting node to network at %s\n", my.key, config.introducer)
 	ringSuccessor, err := caller.FindSuccessor(ring, my.key)
 	if err != nil {
-		log.Printf("[DIAGNOSTIC] Join failed.  Target: %s", ring)
-		log.Print(err)
-		panic("rpcFindSuccessor failed!")
+		return err
 	}
 	successor = &ringSuccessor
 	fingers[0] = &ringSuccessor
 	log.Printf("[NODE %d] New successor %d!\n", my.key, successor.Key)
 	log.Printf("[NODE %d] My keyspace is (%d, %d)\n", my.key, my.key, successor.Key)
+	return nil
 }
 
 // closestPrecedingNode finds the closest preceding node to the key in this node's finger table.

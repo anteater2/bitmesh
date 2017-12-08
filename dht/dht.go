@@ -7,17 +7,19 @@ import (
 // DHT ...
 type DHT struct {
 	node   string
+	bits   uint64
 	caller *chord.NodeCaller
 }
 
 // New creates a client to access DHT
-func New(node string, receivePort uint16) (*DHT, error) { // configuration
+func New(node string, receivePort uint16, bits uint64) (*DHT, error) { // configuration
 	caller, err := chord.NewNodeCaller(receivePort)
 	if err != nil {
 		return nil, err
 	}
 	return &DHT{
 		node:   node,
+		bits:   bits,
 		caller: caller,
 	}, nil
 }
@@ -29,7 +31,7 @@ func (dht *DHT) Start() {
 
 // Put puts a key-value pair into dht.
 func (dht *DHT) Put(k string, v string) error {
-	hashk := chord.Hash(k, 1<<10)
+	hashk := chord.Hash(k, 1<<dht.bits)
 	remote, err := dht.caller.FindSuccessor(dht.node, hashk)
 	if err != nil {
 		return err
@@ -43,7 +45,7 @@ func (dht *DHT) Put(k string, v string) error {
 
 // Get gets the value corresponding to the key from dht
 func (dht *DHT) Get(k string) (string, error) {
-	hashk := chord.Hash(k, 1<<10)
+	hashk := chord.Hash(k, 1<<dht.bits)
 	remote, err := dht.caller.FindSuccessor(dht.node, hashk)
 	if err != nil {
 		return "", err
