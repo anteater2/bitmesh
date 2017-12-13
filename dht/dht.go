@@ -4,7 +4,7 @@ import (
 	"github.com/anteater2/bitmesh/chord"
 )
 
-// DHT ...
+// DHT represents a client for a distributed hash table.
 type DHT struct {
 	node   string
 	bits   uint64
